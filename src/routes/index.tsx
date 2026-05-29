@@ -75,49 +75,70 @@ type HistoryItem = {
 };
 
 const HISTORY_KEY = "thinkit_history_v1";
+const IDB_NAME = "thinkit";
+const IDB_STORE = "history";
 
-function loadHistory(): HistoryItem[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(HISTORY_KEY);
-    return raw ? (JSON.parse(raw) as HistoryItem[]) : [];
-  } catch {
-    return [];
-  }
+function openHistoryDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE, { keyPath: "key" });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
 }
-function stripHeavy(items: HistoryItem[]): HistoryItem[] {
-  // Drop base64 data URL thumbnails so we don't blow past localStorage quota.
-  return items.map((it) => ({
-    ...it,
-    result: {
-      ...it.result,
-      thumbnails: it.result.thumbnails.map((t) =>
-        t.url && t.url.startsWith("data:") ? { ...t, url: "" } : t,
-      ),
-    },
-  }));
-}
-function saveHistory(items: HistoryItem[]) {
-  if (typeof window === "undefined") return;
-  const trimmed = items.slice(0, 20);
+
+async function loadHistory(): Promise<HistoryItem[]> {
+  if (typeof window === "undefined" || !("indexedDB" in window)) return [];
   try {
-    window.localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed));
-    return;
+    const db = await openHistoryDB();
+    const items = await new Promise<HistoryItem[]>((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readonly");
+      const store = tx.objectStore(IDB_STORE);
+      const req = store.get(HISTORY_KEY);
+      req.onsuccess = () => {
+        const row = req.result as { key: string; items: HistoryItem[] } | undefined;
+        resolve(row?.items ?? []);
+      };
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return items;
   } catch {
-    // Likely QuotaExceededError due to large base64 thumbnails — retry without them.
-  }
-  try {
-    window.localStorage.setItem(HISTORY_KEY, JSON.stringify(stripHeavy(trimmed)));
-  } catch {
-    // Last resort: keep only metadata of the most recent entries.
+    // Fallback to legacy localStorage payload (won't contain base64 thumbnails).
     try {
-      const minimal = stripHeavy(trimmed).slice(0, 10);
-      window.localStorage.setItem(HISTORY_KEY, JSON.stringify(minimal));
+      const raw = window.localStorage.getItem(HISTORY_KEY);
+      return raw ? (JSON.parse(raw) as HistoryItem[]) : [];
     } catch {
-      // ignore
+      return [];
     }
   }
 }
+
+async function saveHistory(items: HistoryItem[]): Promise<void> {
+  if (typeof window === "undefined" || !("indexedDB" in window)) return;
+  const trimmed = items.slice(0, 20);
+  try {
+    const db = await openHistoryDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).put({ key: HISTORY_KEY, items: trimmed });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+    db.close();
+    // Clear legacy localStorage entry so we don't read stale data on fallback.
+    try { window.localStorage.removeItem(HISTORY_KEY); } catch { /* ignore */ }
+  } catch {
+    // Last resort: ignore. IndexedDB usually has hundreds of MB available.
+  }
+}
+
 
 function Index() {
   const [view, setView] = useState<View>("login");
@@ -166,7 +187,7 @@ function Index() {
                 score: r.score.total,
                 result: enriched,
               };
-              saveHistory([item, ...loadHistory()]);
+              void loadHistory().then((prev) => saveHistory([item, ...prev]));
               setView("results");
             }}
             onError={(msg) => {
@@ -1207,14 +1228,24 @@ function ReportCard({ result }: { result: AnalysisResult }) {
 /* ---------------- View 5: History ---------------- */
 
 function HistoryView({ onOpen }: { onOpen: (r: AnalysisResult) => void }) {
-  const [items, setItems] = useState<HistoryItem[]>(() => loadHistory());
+  const [items, setItems] = useState<HistoryItem[]>([]);
   useEffect(() => {
-    setItems(loadHistory());
+    let cancelled = false;
+    void loadHistory().then((data) => {
+      if (!cancelled) setItems(data);
+    });
     const onStorage = (e: StorageEvent) => {
-      if (e.key === HISTORY_KEY) setItems(loadHistory());
+      if (e.key === HISTORY_KEY) {
+        void loadHistory().then((data) => {
+          if (!cancelled) setItems(data);
+        });
+      }
     };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   return (
