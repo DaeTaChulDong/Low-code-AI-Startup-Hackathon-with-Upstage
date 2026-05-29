@@ -380,16 +380,18 @@ function LoginView({ onContinue }: { onContinue: () => void }) {
           className="flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
+            e.stopPropagation();
             onContinue();
           }}
         >
-          <Input type="email" placeholder="이메일" />
-          <Input type="password" placeholder="비밀번호" />
+          <Input type="email" placeholder="이메일" autoComplete="email" />
+          <Input type="password" placeholder="비밀번호" autoComplete="current-password" />
           {tab === "signup" && (
-            <Input type="password" placeholder="비밀번호 확인" />
+            <Input type="password" placeholder="비밀번호 확인" autoComplete="new-password" />
           )}
           <button
-            type="submit"
+            type="button"
+            onClick={() => onContinue()}
             className="mt-2 rounded-lg py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: RED }}
           >
