@@ -110,6 +110,8 @@ async function solarText(
 
 // Whisper가 허용하는 확장자: flac, m4a, mp3, mp4, mpeg, mpga, oga, ogg, wav, webm
 const WHISPER_EXT_BY_MIME: Record<string, string> = {
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
   "video/mp4": "mp4",
   "video/quicktime": "mp4", // .mov → mp4 컨테이너로 라벨링하면 Whisper가 처리
   "video/webm": "webm",
@@ -119,8 +121,6 @@ const WHISPER_EXT_BY_MIME: Record<string, string> = {
   "audio/mp3": "mp3",
   "audio/mp4": "m4a",
   "audio/x-m4a": "m4a",
-  "audio/wav": "wav",
-  "audio/x-wav": "wav",
   "audio/webm": "webm",
   "audio/ogg": "ogg",
   "audio/flac": "flac",
@@ -397,23 +397,25 @@ export const Route = createFileRoute("/api/analyze")({
           );
         }
 
+        const audio = form.get("audio");
         const video = form.get("video");
         const category = (form.get("category") as string) || "Entertainment";
         const customPrompt = (form.get("custom_prompt") as string) || "";
+        const media = audio instanceof File ? audio : video;
 
-        if (!(video instanceof File)) {
-          return Response.json({ error: "video 파일이 필요합니다." }, { status: 400 });
+        if (!(media instanceof File)) {
+          return Response.json({ error: "audio 또는 video 파일이 필요합니다." }, { status: 400 });
         }
-        if (video.size > 25 * 1024 * 1024) {
+        if (media.size > 25 * 1024 * 1024) {
           return Response.json(
-            { error: "영상 파일이 25MB를 초과합니다. Whisper API 제한으로 더 짧은 영상을 사용해주세요." },
+            { error: "오디오 파일이 25MB를 초과합니다. 더 짧은 영상을 사용해주세요." },
             { status: 400 },
           );
         }
 
         try {
           // Phase 1: 대본 추출 (Whisper)
-          const transcript = await transcribeWithWhisper(openaiKey, video);
+          const transcript = await transcribeWithWhisper(openaiKey, media);
           const script = transcript.text;
           if (!script || script.length < 5) {
             return Response.json(
