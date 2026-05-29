@@ -1228,14 +1228,24 @@ function ReportCard({ result }: { result: AnalysisResult }) {
 /* ---------------- View 5: History ---------------- */
 
 function HistoryView({ onOpen }: { onOpen: (r: AnalysisResult) => void }) {
-  const [items, setItems] = useState<HistoryItem[]>(() => loadHistory());
+  const [items, setItems] = useState<HistoryItem[]>([]);
   useEffect(() => {
-    setItems(loadHistory());
+    let cancelled = false;
+    void loadHistory().then((data) => {
+      if (!cancelled) setItems(data);
+    });
     const onStorage = (e: StorageEvent) => {
-      if (e.key === HISTORY_KEY) setItems(loadHistory());
+      if (e.key === HISTORY_KEY) {
+        void loadHistory().then((data) => {
+          if (!cancelled) setItems(data);
+        });
+      }
     };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   return (
