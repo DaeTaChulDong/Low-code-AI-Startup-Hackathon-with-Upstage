@@ -180,7 +180,7 @@ function SideLink({
       onClick={onClick}
       className="flex items-center gap-3 px-3 py-2 text-left text-sm font-medium transition-colors"
       style={{
-        color: active ? RED : "#CCCCCC",
+        color: active ? "#FFFFFF" : "#CCCCCC",
         borderLeft: active ? `3px solid ${RED}` : "3px solid transparent",
         backgroundColor: active ? "#1A1A1A" : "transparent",
       }}
