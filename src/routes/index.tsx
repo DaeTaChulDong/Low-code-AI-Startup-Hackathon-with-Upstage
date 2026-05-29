@@ -683,8 +683,8 @@ function ThumbnailsCard() {
             </div>
             <p className="text-xs font-medium" style={{ color: INK }}>{t.label}</p>
             <button
-              className="flex items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-semibold transition-colors hover:bg-[#A70100] hover:text-white"
-              style={{ border: `1px solid ${RED}`, color: RED }}
+              className="flex items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-semibold text-[#A70100] transition-colors hover:bg-[#A70100] hover:text-white"
+              style={{ border: `1px solid ${RED}` }}
             >
               <Download className="h-3.5 w-3.5" /> 다운로드
             </button>
