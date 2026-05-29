@@ -1009,8 +1009,9 @@ function ThumbnailsCard({ thumbnails }: { thumbnails: ApiThumb[] }) {
                 {t.prompt}
               </pre>
             )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
