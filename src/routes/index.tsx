@@ -673,14 +673,26 @@ function LoadingView({
     const t3 = setTimeout(() => setActive(3), 12000);
 
     extractAudioForWhisper(file)
-      .then((audioFile) => {
-        const fd = new FormData();
-        fd.append("audio", audioFile, "upload.wav");
-        fd.append("original_filename", file.name);
-        fd.append("category", category);
-        fd.append("custom_prompt", customPrompt);
-        return fetch("/api/analyze", { method: "POST", body: fd });
-      })
+      .then(
+        (audioFile) => {
+          const fd = new FormData();
+          fd.append("audio", audioFile, "upload.wav");
+          fd.append("original_filename", file.name);
+          fd.append("category", category);
+          fd.append("custom_prompt", customPrompt);
+          return fetch("/api/analyze", { method: "POST", body: fd });
+        },
+        // Fallback: browser couldn't decode the video's audio track.
+        // Send the original file as `video` and let Whisper handle it server-side.
+        () => {
+          const fd = new FormData();
+          fd.append("video", file, file.name);
+          fd.append("original_filename", file.name);
+          fd.append("category", category);
+          fd.append("custom_prompt", customPrompt);
+          return fetch("/api/analyze", { method: "POST", body: fd });
+        },
+      )
       .then(async (res) => {
         const data = (await res.json()) as
           | { result: AnalysisResult; status: string }
@@ -701,6 +713,7 @@ function LoadingView({
         clearTimeout(t2);
         clearTimeout(t3);
       });
+
 
     return () => {
       clearTimeout(t1);
