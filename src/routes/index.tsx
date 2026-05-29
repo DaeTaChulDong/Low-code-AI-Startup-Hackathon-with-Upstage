@@ -187,7 +187,7 @@ function Index() {
                 score: r.score.total,
                 result: enriched,
               };
-              saveHistory([item, ...loadHistory()]);
+              void loadHistory().then((prev) => saveHistory([item, ...prev]));
               setView("results");
             }}
             onError={(msg) => {
