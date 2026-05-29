@@ -108,12 +108,48 @@ async function solarText(
   return (data.choices?.[0]?.message?.content ?? "").trim();
 }
 
+// Whisper가 허용하는 확장자: flac, m4a, mp3, mp4, mpeg, mpga, oga, ogg, wav, webm
+const WHISPER_EXT_BY_MIME: Record<string, string> = {
+  "video/mp4": "mp4",
+  "video/quicktime": "mp4", // .mov → mp4 컨테이너로 라벨링하면 Whisper가 처리
+  "video/webm": "webm",
+  "video/x-matroska": "webm",
+  "video/mpeg": "mpeg",
+  "audio/mpeg": "mp3",
+  "audio/mp3": "mp3",
+  "audio/mp4": "m4a",
+  "audio/x-m4a": "m4a",
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
+  "audio/webm": "webm",
+  "audio/ogg": "ogg",
+  "audio/flac": "flac",
+};
+
+function normalizeFilenameForWhisper(file: File): string {
+  const original = (file.name || "").toLowerCase();
+  const dot = original.lastIndexOf(".");
+  const ext = dot >= 0 ? original.slice(dot + 1) : "";
+  const allowed = new Set([
+    "flac", "m4a", "mp3", "mp4", "mpeg", "mpga", "oga", "ogg", "wav", "webm",
+  ]);
+  if (ext && allowed.has(ext)) return original;
+  const mapped = WHISPER_EXT_BY_MIME[file.type] || "mp4";
+  return `audio.${mapped}`;
+}
+
 async function transcribeWithWhisper(
   openaiKey: string,
   videoFile: File,
 ): Promise<{ text: string; wpm: number }> {
+  const safeName = normalizeFilenameForWhisper(videoFile);
+  // 일부 브라우저는 file.type을 빈 문자열로 보냄 → Blob을 재포장해 명시적 MIME 부여
+  const mime = videoFile.type || "video/mp4";
+  const buf = await videoFile.arrayBuffer();
+  const blob = new Blob([buf], { type: mime });
+
   const fd = new FormData();
-  fd.append("file", videoFile, videoFile.name || "video.mp4");
+  fd.append("file", blob, safeName);
   fd.append("model", "whisper-1");
   fd.append("language", "ko");
   fd.append("response_format", "text");
@@ -125,7 +161,9 @@ async function transcribeWithWhisper(
   });
   if (!res.ok) {
     const t = await res.text();
-    throw new Error(`Whisper error ${res.status}: ${t.slice(0, 300)}`);
+    throw new Error(
+      `Whisper error ${res.status} (filename=${safeName}, mime=${mime}, size=${videoFile.size}): ${t.slice(0, 300)}`,
+    );
   }
   const text = (await res.text()).trim();
   const wordCount = text.split(/\s+/).filter(Boolean).length;
