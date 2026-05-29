@@ -317,21 +317,27 @@ async function generateOneThumbnail(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "dall-e-3",
+        model: "gpt-image-1",
         prompt,
-        size: "1792x1024",
-        quality: "standard",
+        size: "1536x1024",
+        quality: "low",
         n: 1,
       }),
     });
     if (!res.ok) {
       const t = await res.text();
-      throw new Error(`DALL-E ${res.status}: ${t.slice(0, 200)}`);
+      throw new Error(`OpenAI ${res.status}: ${t.slice(0, 200)}`);
     }
-    const data = (await res.json()) as { data?: Array<{ url?: string }> };
+    const data = (await res.json()) as {
+      data?: Array<{ b64_json?: string; url?: string }>;
+    };
+    const first = data.data?.[0];
+    const url = first?.b64_json
+      ? `data:image/png;base64,${first.b64_json}`
+      : (first?.url ?? null);
     return {
       style: style.name,
-      url: data.data?.[0]?.url ?? null,
+      url,
       prompt,
     };
   } catch (e) {
