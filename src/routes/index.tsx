@@ -544,10 +544,81 @@ function UploadView({
 
 const STEPS = [
   "영상 업로드 중",
-  "음성 분석 중 (Whisper)",
+  "오디오 추출 및 음성 분석 중 (Whisper)",
   "트렌드 분석 중 (Solar)",
   "AI 콘텐츠 생성 중",
 ];
+
+function encodeWav(samples: Float32Array, sampleRate: number): Blob {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const writeString = (offset: number, value: string) => {
+    for (let i = 0; i < value.length; i += 1) view.setUint8(offset + i, value.charCodeAt(i));
+  };
+
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+
+  let offset = 44;
+  for (let i = 0; i < samples.length; i += 1, offset += 2) {
+    const sample = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+async function extractAudioForWhisper(file: File): Promise<File> {
+  if (file.type.startsWith("audio/")) {
+    return new File([await file.arrayBuffer()], "upload.wav", { type: file.type || "audio/wav" });
+  }
+
+  const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextClass) {
+    throw new Error("이 브라우저는 영상 오디오 추출을 지원하지 않습니다. MP3/WAV 파일로 업로드해주세요.");
+  }
+
+  const source = await file.arrayBuffer();
+  const audioContext = new AudioContextClass({ sampleRate: 16000 });
+  try {
+    const decoded = await audioContext.decodeAudioData(source.slice(0));
+    const targetRate = 16000;
+    const targetLength = Math.max(1, Math.round(decoded.duration * targetRate));
+    const samples = new Float32Array(targetLength);
+    const channels = Array.from({ length: decoded.numberOfChannels }, (_, i) => decoded.getChannelData(i));
+
+    for (let i = 0; i < targetLength; i += 1) {
+      const sourceIndex = (i / targetRate) * decoded.sampleRate;
+      const left = Math.floor(sourceIndex);
+      const right = Math.min(left + 1, decoded.length - 1);
+      const ratio = sourceIndex - left;
+      let mixed = 0;
+      for (const channel of channels) {
+        mixed += channel[left] * (1 - ratio) + channel[right] * ratio;
+      }
+      samples[i] = mixed / Math.max(1, channels.length);
+    }
+
+    const wav = encodeWav(samples, targetRate);
+    return new File([wav], "upload.wav", { type: "audio/wav" });
+  } catch (e) {
+    throw new Error(
+      `영상의 오디오 트랙을 추출하지 못했습니다. MP4 안의 오디오 코덱이 브라우저에서 지원되지 않을 수 있습니다. MP3/WAV로 변환해 업로드해주세요. (${e instanceof Error ? e.message : String(e)})`,
+    );
+  } finally {
+    void audioContext.close();
+  }
+}
 
 function LoadingView({
   file,
@@ -574,12 +645,15 @@ function LoadingView({
     const t2 = setTimeout(() => setActive(2), 4000);
     const t3 = setTimeout(() => setActive(3), 12000);
 
-    const fd = new FormData();
-    fd.append("video", file);
-    fd.append("category", category);
-    fd.append("custom_prompt", customPrompt);
-
-    fetch("/api/analyze", { method: "POST", body: fd })
+    extractAudioForWhisper(file)
+      .then((audioFile) => {
+        const fd = new FormData();
+        fd.append("audio", audioFile, "upload.wav");
+        fd.append("original_filename", file.name);
+        fd.append("category", category);
+        fd.append("custom_prompt", customPrompt);
+        return fetch("/api/analyze", { method: "POST", body: fd });
+      })
       .then(async (res) => {
         const data = (await res.json()) as
           | { result: AnalysisResult; status: string }
