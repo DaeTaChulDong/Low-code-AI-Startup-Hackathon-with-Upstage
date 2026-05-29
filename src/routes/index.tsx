@@ -85,12 +85,37 @@ function loadHistory(): HistoryItem[] {
     return [];
   }
 }
+function stripHeavy(items: HistoryItem[]): HistoryItem[] {
+  // Drop base64 data URL thumbnails so we don't blow past localStorage quota.
+  return items.map((it) => ({
+    ...it,
+    result: {
+      ...it.result,
+      thumbnails: it.result.thumbnails.map((t) =>
+        t.url && t.url.startsWith("data:") ? { ...t, url: "" } : t,
+      ),
+    },
+  }));
+}
 function saveHistory(items: HistoryItem[]) {
   if (typeof window === "undefined") return;
+  const trimmed = items.slice(0, 20);
   try {
-    window.localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, 20)));
+    window.localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed));
+    return;
   } catch {
-    // ignore
+    // Likely QuotaExceededError due to large base64 thumbnails — retry without them.
+  }
+  try {
+    window.localStorage.setItem(HISTORY_KEY, JSON.stringify(stripHeavy(trimmed)));
+  } catch {
+    // Last resort: keep only metadata of the most recent entries.
+    try {
+      const minimal = stripHeavy(trimmed).slice(0, 10);
+      window.localStorage.setItem(HISTORY_KEY, JSON.stringify(minimal));
+    } catch {
+      // ignore
+    }
   }
 }
 
