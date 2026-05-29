@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Target,
   Upload,
@@ -15,6 +15,7 @@ import {
   FileVideo,
   Inbox,
   Printer,
+  AlertCircle,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -39,31 +40,149 @@ const BG = "#F5F5F5";
 const BORDER = "#E5E5E5";
 const MUTED = "#888888";
 
+/* ---------- API result types ---------- */
+
+type ApiScore = {
+  keyword_score: number;
+  topic_score: number;
+  visual_score: number;
+  keyword_comment: string;
+  topic_comment: string;
+  visual_comment: string;
+  comment: string;
+  total: number;
+};
+type ApiTitle = { style: string; title: string; why: string };
+type ApiThumb = { style: string; url: string | null; prompt: string; error?: string };
+export type AnalysisResult = {
+  score: ApiScore;
+  titles: ApiTitle[];
+  thumbnails: ApiThumb[];
+  report: string;
+  transcript_preview: string;
+  wpm: number;
+  category: string;
+  analyzed_at: string;
+  filename?: string;
+};
+
+type HistoryItem = {
+  filename: string;
+  category: string;
+  date: string;
+  score: number;
+  result: AnalysisResult;
+};
+
+const HISTORY_KEY = "thinkit_history_v1";
+
+function loadHistory(): HistoryItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(HISTORY_KEY);
+    return raw ? (JSON.parse(raw) as HistoryItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+function saveHistory(items: HistoryItem[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, 20)));
+  } catch {
+    // ignore
+  }
+}
+
 function Index() {
   const [view, setView] = useState<View>("login");
+  const [file, setFile] = useState<File | null>(null);
+  const [category, setCategory] = useState("Science & Technology");
+  const [customPrompt, setCustomPrompt] = useState("");
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const startAnalysis = () => {
+    if (!file) return;
+    setError(null);
+    setResult(null);
+    setView("loading");
+  };
 
   return (
     <div className="min-h-screen bg-white font-sans" style={{ color: INK }}>
       {view === "login" && <LoginView onContinue={() => setView("upload")} />}
       {view === "upload" && (
         <Shell view={view} setView={setView}>
-          <UploadView onAnalyze={() => setView("loading")} />
+          <UploadView
+            file={file}
+            setFile={setFile}
+            category={category}
+            setCategory={setCategory}
+            customPrompt={customPrompt}
+            setCustomPrompt={setCustomPrompt}
+            onAnalyze={startAnalysis}
+          />
         </Shell>
       )}
-      {view === "loading" && (
+      {view === "loading" && file && (
         <Shell view={view} setView={setView}>
-          <LoadingView onDone={() => setView("results")} />
+          <LoadingView
+            file={file}
+            category={category}
+            customPrompt={customPrompt}
+            onDone={(r) => {
+              const enriched: AnalysisResult = { ...r, filename: file.name };
+              setResult(enriched);
+              const item: HistoryItem = {
+                filename: file.name,
+                category: r.category,
+                date: r.analyzed_at.slice(0, 10),
+                score: r.score.total,
+                result: enriched,
+              };
+              saveHistory([item, ...loadHistory()]);
+              setView("results");
+            }}
+            onError={(msg) => {
+              setError(msg);
+              setView("upload");
+            }}
+          />
         </Shell>
       )}
-      {view === "results" && (
+      {view === "results" && result && (
         <Shell view={view} setView={setView}>
-          <ResultsView />
+          <ResultsView result={result} />
         </Shell>
       )}
       {view === "history" && (
         <Shell view={view} setView={setView}>
-          <HistoryView onOpen={() => setView("results")} />
+          <HistoryView
+            onOpen={(r) => {
+              setResult(r);
+              setView("results");
+            }}
+          />
         </Shell>
+      )}
+      {error && view === "upload" && (
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 sm:bottom-6">
+          <div
+            className="flex max-w-md items-start gap-2 rounded-lg bg-white px-4 py-3 text-sm shadow-lg"
+            style={{ border: `1px solid ${RED}`, color: INK }}
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: RED }} />
+            <span>{error}</span>
+            <button
+              onClick={() => setError(null)}
+              className="ml-2 text-xs font-semibold"
+              style={{ color: MUTED }}
+            >
+              닫기
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -294,10 +413,43 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
 
 /* ---------------- View 2: Upload ---------------- */
 
-function UploadView({ onAnalyze }: { onAnalyze: () => void }) {
-  const [file, setFile] = useState<string | null>(null);
-  const [category, setCategory] = useState("Science & Technology");
-  const [request, setRequest] = useState("");
+const CATEGORIES = [
+  "Science & Technology",
+  "Entertainment",
+  "Gaming",
+  "Education",
+  "Howto & Style",
+  "People & Blogs",
+  "Music",
+  "Comedy",
+  "News & Politics",
+  "Sports",
+  "Travel & Events",
+  "Film & Animation",
+  "Autos & Vehicles",
+  "Pets & Animals",
+];
+
+function UploadView({
+  file,
+  setFile,
+  category,
+  setCategory,
+  customPrompt,
+  setCustomPrompt,
+  onAnalyze,
+}: {
+  file: File | null;
+  setFile: (f: File | null) => void;
+  category: string;
+  setCategory: (c: string) => void;
+  customPrompt: string;
+  setCustomPrompt: (s: string) => void;
+  onAnalyze: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const sizeMB = file ? (file.size / (1024 * 1024)).toFixed(1) : null;
+  const tooBig = file ? file.size > 25 * 1024 * 1024 : false;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -305,20 +457,38 @@ function UploadView({ onAnalyze }: { onAnalyze: () => void }) {
         새 영상 분석
       </h2>
 
+      <input
+        ref={inputRef}
+        type="file"
+        accept="video/*,audio/*"
+        className="hidden"
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+      />
       <button
-        onClick={() => setFile("테스트영상.mp4")}
+        onClick={() => inputRef.current?.click()}
         className="flex w-full flex-col items-center gap-3 rounded-xl border-2 border-dashed bg-white p-10 transition-colors hover:border-[#A70100]"
         style={{ borderColor: file ? RED : "#D1D5DB" }}
       >
         <Cloud className="h-12 w-12" style={{ color: RED }} />
         {file ? (
-          <div className="flex items-center gap-2 text-sm font-medium" style={{ color: INK }}>
-            <FileVideo className="h-4 w-4" />
-            {file}
+          <div className="flex flex-col items-center gap-1">
+            <div
+              className="flex items-center gap-2 text-sm font-medium"
+              style={{ color: INK }}
+            >
+              <FileVideo className="h-4 w-4" />
+              {file.name}
+            </div>
+            <span
+              className="text-xs"
+              style={{ color: tooBig ? RED : MUTED }}
+            >
+              {sizeMB}MB {tooBig ? "(25MB 초과 — Whisper API 제한)" : ""}
+            </span>
           </div>
         ) : (
           <p className="text-sm" style={{ color: MUTED }}>
-            MP4 파일을 드래그하거나 클릭해서 업로드
+            영상 파일을 클릭해서 업로드 (최대 25MB · MP4/MP3 권장)
           </p>
         )}
       </button>
@@ -337,15 +507,7 @@ function UploadView({ onAnalyze }: { onAnalyze: () => void }) {
             className="w-full rounded-lg bg-white px-4 py-2.5 text-sm outline-none focus:border-[#A70100]"
             style={{ border: `1px solid ${BORDER}` }}
           >
-            {[
-              "Science & Technology",
-              "Entertainment",
-              "Gaming",
-              "Education",
-              "Cooking",
-              "Travel",
-              "Beauty & Fashion",
-            ].map((c) => (
+            {CATEGORIES.map((c) => (
               <option key={c}>{c}</option>
             ))}
           </select>
@@ -356,8 +518,8 @@ function UploadView({ onAnalyze }: { onAnalyze: () => void }) {
             AI 맞춤 요청 (선택사항)
           </label>
           <textarea
-            value={request}
-            onChange={(e) => setRequest(e.target.value)}
+            value={customPrompt}
+            onChange={(e) => setCustomPrompt(e.target.value)}
             rows={3}
             placeholder="예: 배경은 우주 느낌으로, 밝은 톤으로 제작해주세요"
             className="w-full resize-none rounded-lg bg-white px-4 py-2.5 text-sm outline-none focus:border-[#A70100]"
@@ -368,7 +530,8 @@ function UploadView({ onAnalyze }: { onAnalyze: () => void }) {
 
       <button
         onClick={onAnalyze}
-        className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl py-4 text-base font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+        disabled={!file || tooBig}
+        className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl py-4 text-base font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         style={{ backgroundColor: RED }}
       >
         AI 분석 시작 <Rocket className="h-5 w-5" />
@@ -380,23 +543,70 @@ function UploadView({ onAnalyze }: { onAnalyze: () => void }) {
 /* ---------------- View 3: Loading ---------------- */
 
 const STEPS = [
-  "영상 전처리 중",
-  "음성 분석 중",
-  "트렌드 분석 중",
+  "영상 업로드 중",
+  "음성 분석 중 (Whisper)",
+  "트렌드 분석 중 (Solar)",
   "AI 콘텐츠 생성 중",
 ];
 
-function LoadingView({ onDone }: { onDone: () => void }) {
+function LoadingView({
+  file,
+  category,
+  customPrompt,
+  onDone,
+  onError,
+}: {
+  file: File;
+  category: string;
+  customPrompt: string;
+  onDone: (result: AnalysisResult) => void;
+  onError: (msg: string) => void;
+}) {
   const [active, setActive] = useState(0);
+  const startedRef = useRef(false);
 
   useEffect(() => {
-    if (active >= STEPS.length) {
-      const t = setTimeout(onDone, 500);
-      return () => clearTimeout(t);
-    }
-    const t = setTimeout(() => setActive(active + 1), 1500);
-    return () => clearTimeout(t);
-  }, [active, onDone]);
+    if (startedRef.current) return;
+    startedRef.current = true;
+
+    // 시각적 진행 (실제 API 응답 전까지 단계별 애니메이션)
+    const t1 = setTimeout(() => setActive(1), 800);
+    const t2 = setTimeout(() => setActive(2), 4000);
+    const t3 = setTimeout(() => setActive(3), 12000);
+
+    const fd = new FormData();
+    fd.append("video", file);
+    fd.append("category", category);
+    fd.append("custom_prompt", customPrompt);
+
+    fetch("/api/analyze", { method: "POST", body: fd })
+      .then(async (res) => {
+        const data = (await res.json()) as
+          | { result: AnalysisResult; status: string }
+          | { error: string };
+        if (!res.ok || "error" in data) {
+          throw new Error(
+            "error" in data ? data.error : "분석에 실패했습니다",
+          );
+        }
+        setActive(STEPS.length);
+        setTimeout(() => onDone(data.result), 400);
+      })
+      .catch((e: unknown) => {
+        onError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      });
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [file, category, customPrompt, onDone, onError]);
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col items-center justify-center py-16">
@@ -404,7 +614,7 @@ function LoadingView({ onDone }: { onDone: () => void }) {
         AI가 영상을 분석하고 있습니다
       </h2>
       <p className="mb-10 text-sm" style={{ color: MUTED }}>
-        평균 소요 시간: 1분 30초 이내
+        영상 길이에 따라 30초~2분 소요됩니다
       </p>
 
       <div
@@ -412,7 +622,10 @@ function LoadingView({ onDone }: { onDone: () => void }) {
         style={{ border: `1px solid ${BORDER}` }}
       >
         <div className="relative flex items-center justify-between">
-          <div className="absolute left-5 right-5 top-5 h-0.5" style={{ backgroundColor: BORDER }}>
+          <div
+            className="absolute left-5 right-5 top-5 h-0.5"
+            style={{ backgroundColor: BORDER }}
+          >
             <div
               className="h-full transition-all duration-500"
               style={{
@@ -426,19 +639,22 @@ function LoadingView({ onDone }: { onDone: () => void }) {
             const done = i < active;
             const current = i === active;
             return (
-              <div key={label} className="relative z-10 flex flex-1 flex-col items-center gap-2">
+              <div
+                key={label}
+                className="relative z-10 flex flex-1 flex-col items-center gap-2"
+              >
                 <div
                   className="flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white"
-                  style={{
-                    borderColor: done || current ? RED : "#D1D5DB",
-                  }}
+                  style={{ borderColor: done || current ? RED : "#D1D5DB" }}
                 >
                   {done ? (
                     <Check className="h-5 w-5" style={{ color: RED }} />
                   ) : current ? (
                     <Loader2 className="h-5 w-5 animate-spin" style={{ color: RED }} />
                   ) : (
-                    <span className="text-xs" style={{ color: MUTED }}>{i + 1}</span>
+                    <span className="text-xs" style={{ color: MUTED }}>
+                      {i + 1}
+                    </span>
                   )}
                 </div>
                 <span
@@ -458,26 +674,28 @@ function LoadingView({ onDone }: { onDone: () => void }) {
 
 /* ---------------- View 4: Results ---------------- */
 
-function ResultsView() {
+function ResultsView({ result }: { result: AnalysisResult }) {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <h2 className="text-2xl font-bold" style={{ color: INK }}>
         분석 결과
       </h2>
-      <TrendScoreCard />
-      <TitlesCard />
-      <ThumbnailsCard />
-      <ReportCard />
+      <TrendScoreCard score={result.score} />
+      <TitlesCard titles={result.titles} />
+      <ThumbnailsCard thumbnails={result.thumbnails} />
+      <ReportCard result={result} />
     </div>
   );
 }
 
-function TrendScoreCard() {
-  const score = 74;
+function TrendScoreCard({ score }: { score: ApiScore }) {
+  const total = score.total;
   const radius = 70;
   const circ = 2 * Math.PI * radius;
-  const offset = circ - (score / 100) * circ;
-  const gaugeColor = score >= 74 ? RED : score < 60 ? "#888888" : RED;
+  const offset = circ - (total / 100) * circ;
+  const gaugeColor = total < 60 ? "#888888" : RED;
+  const badge =
+    total >= 80 ? "Great Potential" : total >= 60 ? "Good Potential" : "Needs Work";
 
   return (
     <div
@@ -491,7 +709,14 @@ function TrendScoreCard() {
         <div className="flex shrink-0 flex-col items-center gap-3">
           <div className="relative h-44 w-44">
             <svg viewBox="0 0 180 180" className="h-full w-full -rotate-90">
-              <circle cx="90" cy="90" r={radius} stroke="#F0F0F0" strokeWidth="14" fill="none" />
+              <circle
+                cx="90"
+                cy="90"
+                r={radius}
+                stroke="#F0F0F0"
+                strokeWidth="14"
+                fill="none"
+              />
               <circle
                 cx="90"
                 cy="90"
@@ -506,45 +731,63 @@ function TrendScoreCard() {
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-4xl font-bold" style={{ color: INK }}>
-                {score}
+                {total}
               </span>
-              <span className="text-xs" style={{ color: MUTED }}>/ 100</span>
+              <span className="text-xs" style={{ color: MUTED }}>
+                / 100
+              </span>
             </div>
           </div>
-          <p className="text-sm font-medium" style={{ color: INK }}>종합 트렌드 적합도</p>
+          <p className="text-sm font-medium" style={{ color: INK }}>
+            종합 트렌드 적합도
+          </p>
           <span
             className="rounded-full px-3 py-1 text-xs font-semibold text-white"
             style={{ backgroundColor: gaugeColor }}
           >
-            Good Potential
+            {badge}
           </span>
         </div>
 
         <div className="flex flex-1 flex-col gap-4 self-stretch">
-          <SubScore label="제목 키워드 적합도" value={78} />
-          <SubScore label="시각적 트렌드 부합도" value={71} />
-          <SubScore label="콘텐츠 주제 관련성" value={73} />
-          <div className="mt-auto flex flex-wrap justify-end gap-2 pt-2">
-            <span
-              className="rounded-full px-3 py-1 text-xs font-medium"
+          <SubScore
+            label="제목 키워드 적합도"
+            value={score.keyword_score}
+            comment={score.keyword_comment}
+          />
+          <SubScore
+            label="시각적 트렌드 부합도"
+            value={score.visual_score}
+            comment={score.visual_comment}
+          />
+          <SubScore
+            label="콘텐츠 주제 관련성"
+            value={score.topic_score}
+            comment={score.topic_comment}
+          />
+          {score.comment && (
+            <p
+              className="mt-2 rounded-lg p-3 text-xs leading-relaxed"
               style={{ backgroundColor: BG, color: INK }}
             >
-              Coverage 64%
-            </span>
-            <span
-              className="rounded-full px-3 py-1 text-xs font-medium text-white"
-              style={{ backgroundColor: RED }}
-            >
-              Novelty 72%
-            </span>
-          </div>
+              {score.comment}
+            </p>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function SubScore({ label, value }: { label: string; value: number }) {
+function SubScore({
+  label,
+  value,
+  comment,
+}: {
+  label: string;
+  value: number;
+  comment?: string;
+}) {
   return (
     <div>
       <div className="mb-1 flex justify-between text-xs">
@@ -559,29 +802,16 @@ function SubScore({ label, value }: { label: string; value: number }) {
           style={{ width: `${value}%`, backgroundColor: RED }}
         />
       </div>
+      {comment && (
+        <p className="mt-1 text-[11px]" style={{ color: MUTED }}>
+          {comment}
+        </p>
+      )}
     </div>
   );
 }
 
-const TITLES = [
-  {
-    tag: "강렬 클릭 유도형",
-    title: "행성들은 왜 모두 동글까요? 그 비밀을 밝혀봅니다!",
-    why: "호기심을 자극하여 시청자가 답을 찾고 싶도록 유도합니다",
-  },
-  {
-    tag: "감성 스토리형",
-    title: "행성들이 동글게 변하는 과정과 이유",
-    why: "과학적으로 구체적인 정보를 제공하여 문제 해결에 초점을 맞춥니다",
-  },
-  {
-    tag: "깔끔 정보형",
-    title: "행성과 소행성, 그들의 놀라운 차이점은?",
-    why: "행성과 소행성의 차이를 강력하게 부각시켜 관심을 끌 수 있습니다",
-  },
-];
-
-function TitlesCard() {
+function TitlesCard({ titles }: { titles: ApiTitle[] }) {
   const [copied, setCopied] = useState<number | null>(null);
   return (
     <div
@@ -592,27 +822,25 @@ function TitlesCard() {
         클릭을 부르는 제목 추천
       </h3>
       <div className="flex flex-col gap-3">
-        {TITLES.map((t, i) => (
-          <div
-            key={i}
-            className="rounded-lg p-4"
-            style={{ backgroundColor: BG }}
-          >
+        {titles.map((t, i) => (
+          <div key={i} className="rounded-lg p-4" style={{ backgroundColor: BG }}>
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1">
                 <span
                   className="inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white"
                   style={{ backgroundColor: RED }}
                 >
-                  {t.tag}
+                  {t.style}
                 </span>
                 <p className="mt-2 text-sm font-semibold" style={{ color: INK }}>
                   {t.title}
                 </p>
-                <p className="mt-1.5 text-xs" style={{ color: MUTED }}>
-                  <span className="font-semibold">WHY: </span>
-                  {t.why}
-                </p>
+                {t.why && (
+                  <p className="mt-1.5 text-xs" style={{ color: MUTED }}>
+                    <span className="font-semibold">WHY: </span>
+                    {t.why}
+                  </p>
+                )}
               </div>
               <button
                 onClick={() => {
@@ -624,7 +852,11 @@ function TitlesCard() {
                 style={{ color: copied === i ? RED : MUTED }}
                 aria-label="copy"
               >
-                {copied === i ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copied === i ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
               </button>
             </div>
           </div>
@@ -634,31 +866,7 @@ function TitlesCard() {
   );
 }
 
-const THUMBS = [
-  {
-    label: "강렬한 클릭 유도형",
-    text: "왜 동글까?",
-    gradient: "linear-gradient(135deg, #A70100 0%, #5B0000 100%)",
-    prompt:
-      "Vibrant space scene, glowing planet, bold yellow text '왜 동글까?', high contrast, click-bait style YouTube thumbnail",
-  },
-  {
-    label: "감성 스토리형",
-    text: "행성의 비밀",
-    gradient: "linear-gradient(135deg, #333333 0%, #111111 100%)",
-    prompt:
-      "Soft pastel space illustration, planet evolution, elegant serif overlay '행성의 비밀', cinematic mood",
-  },
-  {
-    label: "깔끔한 정보형",
-    text: "행성 vs 소행성",
-    gradient: "linear-gradient(135deg, #888888 0%, #444444 100%)",
-    prompt:
-      "Clean infographic style thumbnail, side-by-side planet vs asteroid, minimalist sans-serif text '행성 vs 소행성'",
-  },
-];
-
-function ThumbnailsCard() {
+function ThumbnailsCard({ thumbnails }: { thumbnails: ApiThumb[] }) {
   const [openIdx, setOpenIdx] = useState<number | null>(null);
   return (
     <div
@@ -666,28 +874,43 @@ function ThumbnailsCard() {
       style={{ border: `1px solid ${BORDER}` }}
     >
       <h3 className="text-lg font-bold" style={{ color: INK }}>
-        AI 완성형 썸네일 (텍스트 포함)
+        AI 완성형 썸네일
       </h3>
       <p className="mt-1 text-xs" style={{ color: MUTED }}>
-        AI가 영상 내용을 요약한 핵심 키워드를 이미지 안에 직접 써넣었습니다
+        DALL-E 3가 영상 내용을 기반으로 3가지 스타일의 썸네일을 생성했습니다
       </p>
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {THUMBS.map((t, i) => (
+        {thumbnails.map((t, i) => (
           <div key={i} className="flex flex-col gap-2">
-            <div
-              className="flex aspect-video items-center justify-center rounded-lg p-3 text-center text-lg font-extrabold text-white shadow-sm transition-all hover:ring-2 hover:ring-[#A70100]"
-              style={{ background: t.gradient }}
-            >
-              {t.text}
-            </div>
-            <p className="text-xs font-medium" style={{ color: INK }}>{t.label}</p>
-            <button
-              className="flex items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-semibold text-[#A70100] transition-colors hover:bg-[#A70100] hover:text-white"
-              style={{ border: `1px solid ${RED}` }}
-            >
-              <Download className="h-3.5 w-3.5" /> 다운로드
-            </button>
+            {t.url ? (
+              <img
+                src={t.url}
+                alt={t.style}
+                className="aspect-video w-full rounded-lg object-cover shadow-sm transition-all hover:ring-2 hover:ring-[#A70100]"
+              />
+            ) : (
+              <div
+                className="flex aspect-video items-center justify-center rounded-lg p-3 text-center text-xs text-white"
+                style={{ background: "#444" }}
+              >
+                생성 실패{t.error ? `: ${t.error.slice(0, 60)}` : ""}
+              </div>
+            )}
+            <p className="text-xs font-medium" style={{ color: INK }}>
+              {t.style}
+            </p>
+            {t.url && (
+              <a
+                href={t.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-semibold text-[#A70100] transition-colors hover:bg-[#A70100] hover:text-white"
+                style={{ border: `1px solid ${RED}` }}
+              >
+                <Download className="h-3.5 w-3.5" /> 새 탭에서 열기
+              </a>
+            )}
             <button
               onClick={() => setOpenIdx(openIdx === i ? null : i)}
               className="flex items-center justify-center gap-1 text-xs"
@@ -710,43 +933,49 @@ function ThumbnailsCard() {
   );
 }
 
-/* ---------------- Report (long-form) ---------------- */
+/* ---------------- Report ---------------- */
 
-function ReportSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col">
-      <div className="flex items-center gap-2">
-        <span
-          className="inline-block h-3 w-3"
-          style={{ backgroundColor: RED }}
-          aria-hidden
-        />
-        <h4 className="text-[15px] font-bold" style={{ color: INK }}>
-          {title}
-        </h4>
-      </div>
-      <div
-        className="mt-2 h-px w-full"
-        style={{ backgroundColor: BORDER }}
-      />
-      <div
-        className="mt-4 flex flex-col gap-4 text-[15px]"
-        style={{ color: "#333333", lineHeight: 1.8 }}
-      >
-        {children}
-      </div>
-    </section>
-  );
+function renderMarkdownReport(md: string) {
+  // ## 헤더 기준으로 섹션 분리
+  const blocks = md.split(/\n(?=##\s)/g).map((b) => b.trim()).filter(Boolean);
+  return blocks.map((block, i) => {
+    const lines = block.split("\n");
+    const headerLine = lines[0]?.startsWith("##") ? lines.shift() ?? "" : "";
+    const title = headerLine.replace(/^#+\s*/, "").trim();
+    const body = lines.join("\n").trim();
+    return (
+      <section key={i} className="flex flex-col">
+        {title && (
+          <>
+            <div className="flex items-center gap-2">
+              <span
+                className="inline-block h-3 w-3"
+                style={{ backgroundColor: RED }}
+                aria-hidden
+              />
+              <h4 className="text-[15px] font-bold" style={{ color: INK }}>
+                {title}
+              </h4>
+            </div>
+            <div className="mt-2 h-px w-full" style={{ backgroundColor: BORDER }} />
+          </>
+        )}
+        <div
+          className="mt-4 whitespace-pre-wrap text-[15px]"
+          style={{ color: "#333333", lineHeight: 1.8 }}
+        >
+          {body.replace(/\*\*(.+?)\*\*/g, "$1")}
+        </div>
+      </section>
+    );
+  });
 }
 
-function ReportCard() {
+function ReportCard({ result }: { result: AnalysisResult }) {
   const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendMsg, setSendMsg] = useState<string | null>(null);
+  const date = result.analyzed_at.slice(0, 10).replace(/-/g, ".");
 
   return (
     <div
@@ -760,7 +989,9 @@ function ReportCard() {
               AI 상세 분석 리포트
             </h3>
             <p className="mt-1.5 text-xs sm:text-sm" style={{ color: MUTED }}>
-              [카테고리] Science & Technology &nbsp;|&nbsp; 분석일: 2026.05.21 &nbsp;|&nbsp; 종합 점수: 74 / 100
+              [카테고리] {result.category} &nbsp;|&nbsp; 분석일: {date}{" "}
+              &nbsp;|&nbsp; 종합 점수: {result.score.total} / 100 &nbsp;|&nbsp; WPM:{" "}
+              {result.wpm}
             </p>
           </div>
           <button
@@ -773,66 +1004,24 @@ function ReportCard() {
           </button>
         </div>
 
-        <div className="flex flex-col gap-6">
-          <ReportSection title="영상 강점">
-            <p>
-              이 영상은 주제와 핵심 메시지가 명확하며, 시청자에게 과학적 호기심을 전달하는 구성이 잘 갖춰져 있습니다.
-              특히 <strong style={{ color: INK }}>행성의 형성 원리</strong>와{" "}
-              <strong style={{ color: INK }}>중력의 작용</strong>이라는 두 축을 중심으로 서사가 전개되어,
-              시청자가 자연스럽게 내용을 따라갈 수 있는 구조적 장점이 있습니다.
-            </p>
-            <p>
-              또한 <strong style={{ color: INK }}>WPM(분당 단어 수) 분석</strong> 결과, 초반 2분간 발화 속도가
-              안정적으로 유지되어 시청자 이탈을 방지하는 데 유리한 템포를 갖추고 있습니다.
-            </p>
-          </ReportSection>
+        <div className="flex flex-col gap-6">{renderMarkdownReport(result.report)}</div>
 
-          <ReportSection title="개선이 필요한 부분">
-            <p>
-              현재 영상의 제목 키워드는 카테고리 내{" "}
-              <strong style={{ color: INK }}>상위 인기 영상의 트렌드 키워드와 약 22% 편차</strong>를 보이고 있습니다.
-              특히 ‘행성’, ‘우주’와 같은 범용 키워드 위주로 구성되어 있어, 현재 Science & Technology 카테고리에서
-              높은 <strong style={{ color: INK }}>CTR</strong>을 기록 중인 ‘놀라운 사실’, ‘실제로는’, ‘과학이 밝힌’
-              등의 어구와 차이가 있습니다.
+        {result.transcript_preview && (
+          <details className="mt-6">
+            <summary
+              className="cursor-pointer text-xs font-semibold"
+              style={{ color: MUTED }}
+            >
+              대본 미리보기 (첫 500자)
+            </summary>
+            <p
+              className="mt-2 rounded-lg p-3 text-xs leading-relaxed"
+              style={{ backgroundColor: BG, color: INK }}
+            >
+              {result.transcript_preview}
             </p>
-            <p>
-              시각적 측면에서는 썸네일의 <strong style={{ color: INK }}>색상 대비</strong>가 카테고리 상위 영상 대비
-              낮게 측정되었으며, 텍스트 배치가 중앙에 집중되어 있어 모바일 피드에서 시인성이 떨어질 수 있습니다.
-            </p>
-          </ReportSection>
-
-          <ReportSection title="구체적 개선 방향">
-            <p>
-              <strong style={{ color: INK }}>훅 구간</strong>을 영상 초반 8초 이내로 재구성하고, 핵심 질문을
-              오프닝에서 먼저 제시하는 방식을 권장합니다. 예를 들어 ‘행성이 동글다는 사실, 당신은 왜 그렇다고
-              생각하시나요?’와 같이 시청자의 즉각적 반응을 유도하는 문장으로 시작하면 이탈률을 줄이는 데
-              효과적입니다.
-            </p>
-            <p>
-              제목 구성에서는 의문문 형식(현재 카테고리 내 인기 영상의{" "}
-              <strong style={{ color: INK }}>38%</strong>가 채택)을 적극 활용하고, 숫자 포함 패턴(예: ‘3가지 이유’,
-              ‘10초 안에 이해하는’)을 결합하면 <strong style={{ color: INK }}>클릭률 향상</strong>을 기대할 수 있습니다.
-            </p>
-            <p>
-              썸네일은 배경 대비를 높이고 핵심 키워드를 이미지 좌상단에 배치하는 구도를 추천드립니다. 인물 또는
-              클로즈업 오브젝트를 중앙에 두는 구성이 현재 카테고리 트렌드와 부합합니다.
-            </p>
-          </ReportSection>
-
-          <ReportSection title="참신성(Novelty) 평가">
-            <p>
-              현재 영상의 <strong style={{ color: INK }}>Novelty 지수는 72/100</strong>으로, 카테고리 내 기존 인기
-              영상과 적절한 차별성을 유지하고 있습니다. 이는 완전히 새로운 접근이라기보다는 검증된 주제를 자신만의
-              방식으로 재해석한 포지셔닝으로, 안정적인 초기 유입을 기대할 수 있는 수준입니다.
-            </p>
-            <p>
-              <strong style={{ color: INK }}>Coverage 지수 64%</strong> 기준으로 해당 카테고리는 일부 인기 토픽에
-              편중되는 경향이 있으나, 현재 임계치(20%) 이상을 유지하고 있어 필터 버블 경고 대상에 해당하지 않습니다.
-              현재 전략을 유지하면서 제목과 썸네일의 트렌드 적합도를 보완하면 채널 성장에 긍정적인 효과를 기대할 수
-              있습니다.
-            </p>
-          </ReportSection>
-        </div>
+          </details>
+        )}
 
         <div className="my-8 h-px w-full" style={{ backgroundColor: BORDER }} />
 
@@ -856,12 +1045,27 @@ function ReportCard() {
               />
             </div>
             <button
-              className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              disabled={sending || !email}
+              onClick={() => {
+                // 이메일 발송 백엔드 미구현 — UX placeholder
+                setSending(true);
+                setTimeout(() => {
+                  setSending(false);
+                  setSendMsg("이메일 발송 기능은 곧 제공됩니다.");
+                  setTimeout(() => setSendMsg(null), 3000);
+                }, 600);
+              }}
+              className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
               style={{ backgroundColor: RED }}
             >
-              리포트 발송
+              {sending ? "발송 중..." : "리포트 발송"}
             </button>
           </div>
+          {sendMsg && (
+            <p className="text-xs" style={{ color: MUTED }}>
+              {sendMsg}
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -870,32 +1074,12 @@ function ReportCard() {
 
 /* ---------------- View 5: History ---------------- */
 
-const HISTORY = [
-  {
-    filename: "우주영상_v2.mp4",
-    category: "Science & Technology",
-    date: "2026-05-25",
-    score: 82,
-    color: "linear-gradient(135deg, #A70100, #5B0000)",
-  },
-  {
-    filename: "여행브이로그_제주.mp4",
-    category: "Travel",
-    date: "2026-05-20",
-    score: 74,
-    color: "linear-gradient(135deg, #333333, #111111)",
-  },
-  {
-    filename: "쿠킹_파스타레시피.mp4",
-    category: "Cooking",
-    date: "2026-05-15",
-    score: 58,
-    color: "linear-gradient(135deg, #888888, #444444)",
-  },
-];
+function HistoryView({ onOpen }: { onOpen: (r: AnalysisResult) => void }) {
+  const [items, setItems] = useState<HistoryItem[]>([]);
+  useEffect(() => {
+    setItems(loadHistory());
+  }, []);
 
-function HistoryView({ onOpen }: { onOpen: () => void }) {
-  const items = HISTORY;
   return (
     <div className="mx-auto max-w-4xl">
       <h2 className="mb-6 text-2xl font-bold" style={{ color: INK }}>
@@ -907,7 +1091,9 @@ function HistoryView({ onOpen }: { onOpen: () => void }) {
           style={{ border: `1px solid ${BORDER}` }}
         >
           <Inbox className="h-12 w-12" style={{ color: MUTED }} />
-          <p className="text-sm" style={{ color: MUTED }}>아직 분석한 영상이 없습니다</p>
+          <p className="text-sm" style={{ color: MUTED }}>
+            아직 분석한 영상이 없습니다
+          </p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -918,9 +1104,13 @@ function HistoryView({ onOpen }: { onOpen: () => void }) {
               style={{ border: `1px solid ${BORDER}` }}
             >
               <div
-                className="h-16 w-28 shrink-0 rounded-lg"
-                style={{ background: it.color }}
-              />
+                className="flex h-16 w-28 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white"
+                style={{
+                  background: `linear-gradient(135deg, ${RED}, #5B0000)`,
+                }}
+              >
+                {it.score}
+              </div>
               <div className="flex-1">
                 <p className="text-sm font-semibold" style={{ color: INK }}>
                   {it.filename}
@@ -936,7 +1126,7 @@ function HistoryView({ onOpen }: { onOpen: () => void }) {
                 점수 {it.score}
               </span>
               <button
-                onClick={onOpen}
+                onClick={() => onOpen(it.result)}
                 className="rounded-lg px-4 py-2 text-xs font-semibold text-white"
                 style={{ backgroundColor: RED }}
               >
