@@ -673,14 +673,26 @@ function LoadingView({
     const t3 = setTimeout(() => setActive(3), 12000);
 
     extractAudioForWhisper(file)
-      .then((audioFile) => {
-        const fd = new FormData();
-        fd.append("audio", audioFile, "upload.wav");
-        fd.append("original_filename", file.name);
-        fd.append("category", category);
-        fd.append("custom_prompt", customPrompt);
-        return fetch("/api/analyze", { method: "POST", body: fd });
-      })
+      .then(
+        (audioFile) => {
+          const fd = new FormData();
+          fd.append("audio", audioFile, "upload.wav");
+          fd.append("original_filename", file.name);
+          fd.append("category", category);
+          fd.append("custom_prompt", customPrompt);
+          return fetch("/api/analyze", { method: "POST", body: fd });
+        },
+        // Fallback: browser couldn't decode the video's audio track.
+        // Send the original file as `video` and let Whisper handle it server-side.
+        () => {
+          const fd = new FormData();
+          fd.append("video", file, file.name);
+          fd.append("original_filename", file.name);
+          fd.append("category", category);
+          fd.append("custom_prompt", customPrompt);
+          return fetch("/api/analyze", { method: "POST", body: fd });
+        },
+      )
       .then(async (res) => {
         const data = (await res.json()) as
           | { result: AnalysisResult; status: string }
@@ -702,6 +714,7 @@ function LoadingView({
         clearTimeout(t3);
       });
 
+
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
@@ -722,10 +735,19 @@ function LoadingView({
         className="w-full rounded-2xl bg-white p-6 shadow-sm sm:p-10"
         style={{ border: `1px solid ${BORDER}` }}
       >
-        <div className="grid grid-cols-4">
+        <div className="relative grid grid-cols-4">
+          {/* Progress line: spans from center of first circle to center of last circle.
+              Circle is h-10 (2.5rem). Column has pt-5 (1.25rem) above the circle,
+              so circle vertical center sits at 1.25rem + 1.25rem = 2.5rem from grid top. */}
           <div
-            className="col-span-4 relative h-0.5"
-            style={{ backgroundColor: BORDER, marginTop: '1.25rem', marginBottom: '-1.25rem' }}
+            className="pointer-events-none absolute h-0.5"
+            style={{
+              left: "12.5%",
+              right: "12.5%",
+              top: "2.5rem",
+              transform: "translateY(-50%)",
+              backgroundColor: BORDER,
+            }}
           >
             <div
               className="h-full transition-all duration-500"
@@ -768,6 +790,7 @@ function LoadingView({
             );
           })}
         </div>
+
       </div>
     </div>
   );
