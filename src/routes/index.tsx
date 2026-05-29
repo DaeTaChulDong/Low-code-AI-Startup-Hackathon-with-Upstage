@@ -583,7 +583,7 @@ async function extractAudioForWhisper(file: File): Promise<File> {
     return new File([await file.arrayBuffer()], "upload.wav", { type: file.type || "audio/wav" });
   }
 
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioContextClass) {
     throw new Error("이 브라우저는 영상 오디오 추출을 지원하지 않습니다. MP3/WAV 파일로 업로드해주세요.");
   }
@@ -645,12 +645,15 @@ function LoadingView({
     const t2 = setTimeout(() => setActive(2), 4000);
     const t3 = setTimeout(() => setActive(3), 12000);
 
-    const fd = new FormData();
-    fd.append("video", file);
-    fd.append("category", category);
-    fd.append("custom_prompt", customPrompt);
-
-    fetch("/api/analyze", { method: "POST", body: fd })
+    extractAudioForWhisper(file)
+      .then((audioFile) => {
+        const fd = new FormData();
+        fd.append("audio", audioFile, "upload.wav");
+        fd.append("original_filename", file.name);
+        fd.append("category", category);
+        fd.append("custom_prompt", customPrompt);
+        return fetch("/api/analyze", { method: "POST", body: fd });
+      })
       .then(async (res) => {
         const data = (await res.json()) as
           | { result: AnalysisResult; status: string }
