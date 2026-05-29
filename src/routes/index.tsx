@@ -953,41 +953,47 @@ function ThumbnailsCard({ thumbnails }: { thumbnails: ApiThumb[] }) {
         AI 완성형 썸네일
       </h3>
       <p className="mt-1 text-xs" style={{ color: MUTED }}>
-        DALL-E 3가 영상 내용을 기반으로 3가지 스타일의 썸네일을 생성했습니다
+        OpenAI gpt-image-1이 영상 내용을 기반으로 3가지 스타일의 썸네일을 생성했습니다
       </p>
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {thumbnails.map((t, i) => (
-          <div key={i} className="flex flex-col gap-2">
-            {t.url ? (
-              <img
-                src={t.url}
-                alt={t.style}
-                className="aspect-video w-full rounded-lg object-cover shadow-sm transition-all hover:ring-2 hover:ring-[#A70100]"
-              />
-            ) : (
-              <div
-                className="flex aspect-video items-center justify-center rounded-lg p-3 text-center text-xs text-white"
-                style={{ background: "#444" }}
-              >
-                생성 실패{t.error ? `: ${t.error.slice(0, 60)}` : ""}
-              </div>
-            )}
-            <p className="text-xs font-medium" style={{ color: INK }}>
-              {t.style}
-            </p>
-            {t.url && (
-              <a
-                href={`/api/thumbnail?url=${encodeURIComponent(t.url)}&name=${encodeURIComponent(
-                  `thinkit_${t.style.replace(/\s+/g, "_")}_${i + 1}.png`,
-                )}`}
-                download
-                className="flex items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-semibold text-[#A70100] transition-colors hover:bg-[#A70100] hover:text-white"
-                style={{ border: `1px solid ${RED}` }}
-              >
-                <Download className="h-3.5 w-3.5" /> 썸네일 다운로드
-              </a>
-            )}
+        {thumbnails.map((t, i) => {
+          const filename = `thinkit_${t.style.replace(/\s+/g, "_")}_${i + 1}.png`;
+          const isDataUrl = t.url?.startsWith("data:");
+          const downloadHref = t.url
+            ? isDataUrl
+              ? t.url
+              : `/api/thumbnail?url=${encodeURIComponent(t.url)}&name=${encodeURIComponent(filename)}`
+            : "";
+          return (
+            <div key={i} className="flex flex-col gap-2">
+              {t.url ? (
+                <img
+                  src={t.url}
+                  alt={t.style}
+                  className="aspect-video w-full rounded-lg object-cover shadow-sm transition-all hover:ring-2 hover:ring-[#A70100]"
+                />
+              ) : (
+                <div
+                  className="flex aspect-video items-center justify-center rounded-lg p-3 text-center text-xs text-white"
+                  style={{ background: "#444" }}
+                >
+                  생성 실패{t.error ? `: ${t.error.slice(0, 60)}` : ""}
+                </div>
+              )}
+              <p className="text-xs font-medium" style={{ color: INK }}>
+                {t.style}
+              </p>
+              {t.url && (
+                <a
+                  href={downloadHref}
+                  download={filename}
+                  className="flex items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-semibold text-[#A70100] transition-colors hover:bg-[#A70100] hover:text-white"
+                  style={{ border: `1px solid ${RED}` }}
+                >
+                  <Download className="h-3.5 w-3.5" /> 썸네일 다운로드
+                </a>
+              )}
             <button
               onClick={() => setOpenIdx(openIdx === i ? null : i)}
               className="flex items-center justify-center gap-1 text-xs"
@@ -1003,8 +1009,9 @@ function ThumbnailsCard({ thumbnails }: { thumbnails: ApiThumb[] }) {
                 {t.prompt}
               </pre>
             )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
