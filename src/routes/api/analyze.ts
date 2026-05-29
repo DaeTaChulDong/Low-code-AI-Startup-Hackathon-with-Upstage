@@ -129,13 +129,13 @@ const WHISPER_EXT_BY_MIME: Record<string, string> = {
 function normalizeFilenameForWhisper(file: File): string {
   const original = (file.name || "").toLowerCase();
   const dot = original.lastIndexOf(".");
-  const ext = dot >= 0 ? original.slice(dot + 1) : "";
+  const rawExt = dot >= 0 ? original.slice(dot + 1) : "";
   const allowed = new Set([
     "flac", "m4a", "mp3", "mp4", "mpeg", "mpga", "oga", "ogg", "wav", "webm",
   ]);
-  if (ext && allowed.has(ext)) return original;
-  const mapped = WHISPER_EXT_BY_MIME[file.type] || "mp4";
-  return `audio.${mapped}`;
+  const ext = allowed.has(rawExt) ? rawExt : (WHISPER_EXT_BY_MIME[file.type] || "mp4");
+  // OpenAI multipart는 비-ASCII filename에서 종종 400을 반환 → 항상 ASCII-safe 이름으로 강제
+  return `upload.${ext}`;
 }
 
 async function transcribeWithWhisper(
