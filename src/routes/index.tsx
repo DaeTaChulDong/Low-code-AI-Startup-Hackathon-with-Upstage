@@ -697,10 +697,10 @@ function LoadingView({
         className="w-full rounded-2xl bg-white p-6 shadow-sm sm:p-10"
         style={{ border: `1px solid ${BORDER}` }}
       >
-        <div className="relative flex items-center justify-between">
+        <div className="grid grid-cols-4">
           <div
-            className="absolute left-5 right-5 top-5 h-0.5"
-            style={{ backgroundColor: BORDER }}
+            className="col-span-4 relative h-0.5"
+            style={{ backgroundColor: BORDER, marginTop: '1.25rem', marginBottom: '-1.25rem' }}
           >
             <div
               className="h-full transition-all duration-500"
@@ -717,10 +717,10 @@ function LoadingView({
             return (
               <div
                 key={label}
-                className="relative z-10 flex flex-1 flex-col items-center gap-2"
+                className="flex flex-col items-center gap-2 pt-5"
               >
                 <div
-                  className="flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white"
+                  className="relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white"
                   style={{ borderColor: done || current ? RED : "#D1D5DB" }}
                 >
                   {done ? (
