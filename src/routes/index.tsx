@@ -902,13 +902,14 @@ function ThumbnailsCard({ thumbnails }: { thumbnails: ApiThumb[] }) {
             </p>
             {t.url && (
               <a
-                href={t.url}
-                target="_blank"
-                rel="noreferrer"
+                href={`/api/thumbnail?url=${encodeURIComponent(t.url)}&name=${encodeURIComponent(
+                  `thinkit_${t.style.replace(/\s+/g, "_")}_${i + 1}.png`,
+                )}`}
+                download
                 className="flex items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-semibold text-[#A70100] transition-colors hover:bg-[#A70100] hover:text-white"
                 style={{ border: `1px solid ${RED}` }}
               >
-                <Download className="h-3.5 w-3.5" /> 새 탭에서 열기
+                <Download className="h-3.5 w-3.5" /> 썸네일 다운로드
               </a>
             )}
             <button
