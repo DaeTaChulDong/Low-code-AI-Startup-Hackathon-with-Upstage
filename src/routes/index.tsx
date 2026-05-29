@@ -104,8 +104,8 @@ function Shell({
 
       <div className="flex flex-1">
         <aside
-          className="hidden w-56 shrink-0 border-r bg-white p-4 sm:block"
-          style={{ borderColor: BORDER }}
+          className="hidden w-56 shrink-0 border-r p-4 sm:block"
+          style={{ borderColor: "#333333", backgroundColor: INK }}
         >
           <nav className="flex flex-col gap-1">
             <SideLink
@@ -180,9 +180,9 @@ function SideLink({
       onClick={onClick}
       className="flex items-center gap-3 px-3 py-2 text-left text-sm font-medium transition-colors"
       style={{
-        color: active ? RED : INK,
+        color: active ? RED : "#CCCCCC",
         borderLeft: active ? `3px solid ${RED}` : "3px solid transparent",
-        backgroundColor: active ? BG : "transparent",
+        backgroundColor: active ? "#1A1A1A" : "transparent",
       }}
     >
       {icon}
@@ -477,6 +477,7 @@ function TrendScoreCard() {
   const radius = 70;
   const circ = 2 * Math.PI * radius;
   const offset = circ - (score / 100) * circ;
+  const gaugeColor = score >= 74 ? RED : score < 60 ? "#888888" : RED;
 
   return (
     <div
@@ -495,7 +496,7 @@ function TrendScoreCard() {
                 cx="90"
                 cy="90"
                 r={radius}
-                stroke={RED}
+                stroke={gaugeColor}
                 strokeWidth="14"
                 fill="none"
                 strokeLinecap="round"
@@ -513,7 +514,7 @@ function TrendScoreCard() {
           <p className="text-sm font-medium" style={{ color: INK }}>종합 트렌드 적합도</p>
           <span
             className="rounded-full px-3 py-1 text-xs font-semibold text-white"
-            style={{ backgroundColor: RED }}
+            style={{ backgroundColor: gaugeColor }}
           >
             Good Potential
           </span>
@@ -675,7 +676,7 @@ function ThumbnailsCard() {
         {THUMBS.map((t, i) => (
           <div key={i} className="flex flex-col gap-2">
             <div
-              className="flex aspect-video items-center justify-center rounded-lg p-3 text-center text-lg font-extrabold text-white shadow-sm"
+              className="flex aspect-video items-center justify-center rounded-lg p-3 text-center text-lg font-extrabold text-white shadow-sm transition-all hover:ring-2 hover:ring-[#A70100]"
               style={{ background: t.gradient }}
             >
               {t.text}
@@ -753,13 +754,23 @@ function ReportCard() {
       style={{ border: `1px solid ${BORDER}`, borderLeft: `4px solid ${RED}` }}
     >
       <div className="p-6 sm:p-10">
-        <div className="mb-8">
-          <h3 className="text-[20px] font-bold" style={{ color: INK }}>
-            AI 상세 분석 리포트
-          </h3>
-          <p className="mt-1.5 text-xs sm:text-sm" style={{ color: MUTED }}>
-            [카테고리] Science & Technology &nbsp;|&nbsp; 분석일: 2026.05.21 &nbsp;|&nbsp; 종합 점수: 74 / 100
-          </p>
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <h3 className="text-[20px] font-bold" style={{ color: INK }}>
+              AI 상세 분석 리포트
+            </h3>
+            <p className="mt-1.5 text-xs sm:text-sm" style={{ color: MUTED }}>
+              [카테고리] Science & Technology &nbsp;|&nbsp; 분석일: 2026.05.21 &nbsp;|&nbsp; 종합 점수: 74 / 100
+            </p>
+          </div>
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors hover:bg-[#F5F5F5]"
+            style={{ borderColor: BORDER, color: INK }}
+          >
+            <Printer className="h-4 w-4" />
+            인쇄 / PDF 저장
+          </button>
         </div>
 
         <div className="flex flex-col gap-6">
