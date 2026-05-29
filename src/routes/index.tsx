@@ -1159,9 +1159,14 @@ function ReportCard({ result }: { result: AnalysisResult }) {
 /* ---------------- View 5: History ---------------- */
 
 function HistoryView({ onOpen }: { onOpen: (r: AnalysisResult) => void }) {
-  const [items, setItems] = useState<HistoryItem[]>([]);
+  const [items, setItems] = useState<HistoryItem[]>(() => loadHistory());
   useEffect(() => {
     setItems(loadHistory());
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === HISTORY_KEY) setItems(loadHistory());
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   return (
