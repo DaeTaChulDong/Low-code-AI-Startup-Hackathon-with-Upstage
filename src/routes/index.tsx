@@ -14,6 +14,7 @@ import {
   Mail,
   FileVideo,
   Inbox,
+  Printer,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
