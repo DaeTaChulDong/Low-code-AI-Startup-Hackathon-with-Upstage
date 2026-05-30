@@ -1200,14 +1200,45 @@ function ReportCard({ result }: { result: AnalysisResult }) {
             </div>
             <button
               disabled={sending || !email}
-              onClick={() => {
-                // 이메일 발송 백엔드 미구현 — UX placeholder
+              onClick={async () => {
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(email)) {
+                  setSendMsg("올바른 이메일 형식을 입력해주세요.");
+                  return;
+                }
+
                 setSending(true);
-                setTimeout(() => {
+                setSendMsg(null);
+
+                try {
+                  const response = await fetch(N8N_WEBHOOK_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      email: email,
+                      category: result.category,
+                      analyzed_at: result.analyzed_at,
+                      score_total: result.score.total,
+                      wpm: result.wpm,
+                      score_title_keyword: result.score.keyword_score,
+                      score_visual_trend: result.score.visual_score,
+                      score_content_relevance: result.score.topic_score,
+                      titles: result.titles,
+                      report: result.report,
+                      transcript_preview: result.transcript_preview ?? "",
+                    }),
+                  });
+
+                  if (response.ok) {
+                    setSendMsg("✓ 입력하신 이메일로 리포트가 발송되었습니다.");
+                  } else {
+                    setSendMsg("✗ 발송에 실패했습니다. 잠시 후 다시 시도해주세요.");
+                  }
+                } catch {
+                  setSendMsg("✗ 발송에 실패했습니다. 네트워크 연결을 확인해주세요.");
+                } finally {
                   setSending(false);
-                  setSendMsg("이메일 발송 기능은 곧 제공됩니다.");
-                  setTimeout(() => setSendMsg(null), 3000);
-                }, 600);
+                }
               }}
               className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
               style={{ backgroundColor: RED }}
