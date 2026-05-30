@@ -7,7 +7,7 @@ export interface N8nWebhookPayload {
 }
 
 export async function callN8n(payload: N8nWebhookPayload): Promise<unknown> {
-  const webhookUrl = "https://eugene385.app.n8n.cloud/webhook-test/Think-it-Pro";
+  const webhookUrl = "https://eugene385.app.n8n.cloud/webhook/Think-it-Pro";
 
   if (!webhookUrl) {
     throw new Error("VITE_N8N_WEBHOOK_URL 환경변수가 설정되어 있지 않습니다.");
