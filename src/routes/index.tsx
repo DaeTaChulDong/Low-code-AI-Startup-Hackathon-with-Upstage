@@ -39,6 +39,7 @@ const INK = "#111111";
 const BG = "#F5F5F5";
 const BORDER = "#E5E5E5";
 const MUTED = "#888888";
+const N8N_WEBHOOK_URL = "https://eugene385.app.n8n.cloud/webhook-test/Think-it-Pro";
 
 /* ---------- API result types ---------- */
 
