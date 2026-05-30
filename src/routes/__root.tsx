@@ -72,14 +72,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "Think it:Pro" },
+      { name: "description", content: "Low-code AI Startup Hackathon with Upstage" },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "Think it:Pro" },
+      { property: "og:description", content: "Low-code AI Startup Hackathon with Upstage" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Think it:Pro" },
+      { name: "twitter:description", content: "Low-code AI Startup Hackathon with Upstage" },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/4877d5e0-6cd3-4e10-9b21-284626ecae84/id-preview-fe17f3cf--f70f5e8c-33c1-4f9c-b15e-3e4f77ff7b3e.lovable.app-1780138049823.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/4877d5e0-6cd3-4e10-9b21-284626ecae84/id-preview-fe17f3cf--f70f5e8c-33c1-4f9c-b15e-3e4f77ff7b3e.lovable.app-1780138049823.png" },
     ],
     links: [
       {
