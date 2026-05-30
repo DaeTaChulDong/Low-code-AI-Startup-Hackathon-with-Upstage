@@ -24,8 +24,7 @@ export const Route = createFileRoute("/")({
       { title: "Think:it Pro — AI 유튜브 썸네일·제목 컨설팅" },
       {
         name: "description",
-        content:
-          "영상·음성 분석 기반 유튜브 썸네일·제목 자동 생성 AI 컨설팅 서비스",
+        content: "영상·음성 분석 기반 유튜브 썸네일·제목 자동 생성 AI 컨설팅 서비스",
       },
     ],
   }),
@@ -39,7 +38,7 @@ const INK = "#111111";
 const BG = "#F5F5F5";
 const BORDER = "#E5E5E5";
 const MUTED = "#888888";
-const N8N_WEBHOOK_URL = "https://eugene385.app.n8n.cloud/webhook-test/Think-it-Pro";
+const N8N_WEBHOOK_URL = "https://eugene385.app.n8n.cloud/webhook/Think-it-Pro";
 
 /* ---------- API result types ---------- */
 
@@ -134,12 +133,15 @@ async function saveHistory(items: HistoryItem[]): Promise<void> {
     });
     db.close();
     // Clear legacy localStorage entry so we don't read stale data on fallback.
-    try { window.localStorage.removeItem(HISTORY_KEY); } catch { /* ignore */ }
+    try {
+      window.localStorage.removeItem(HISTORY_KEY);
+    } catch {
+      /* ignore */
+    }
   } catch {
     // Last resort: ignore. IndexedDB usually has hundreds of MB available.
   }
 }
-
 
 function Index() {
   const [view, setView] = useState<View>("login");
@@ -221,11 +223,7 @@ function Index() {
           >
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: RED }} />
             <span>{error}</span>
-            <button
-              onClick={() => setError(null)}
-              className="ml-2 text-xs font-semibold"
-              style={{ color: MUTED }}
-            >
+            <button onClick={() => setError(null)} className="ml-2 text-xs font-semibold" style={{ color: MUTED }}>
               닫기
             </button>
           </div>
@@ -237,15 +235,7 @@ function Index() {
 
 /* ---------------- Shell ---------------- */
 
-function Shell({
-  view,
-  setView,
-  children,
-}: {
-  view: View;
-  setView: (v: View) => void;
-  children: React.ReactNode;
-}) {
+function Shell({ view, setView, children }: { view: View; setView: (v: View) => void; children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       <header
@@ -286,12 +276,7 @@ function Shell({
               active={view === "history"}
               onClick={() => setView("history")}
             />
-            <SideLink
-              icon={<User className="h-4 w-4" />}
-              label="마이페이지"
-              active={false}
-              onClick={() => {}}
-            />
+            <SideLink icon={<User className="h-4 w-4" />} label="마이페이지" active={false} onClick={() => {}} />
           </nav>
         </aside>
 
@@ -311,18 +296,10 @@ function Shell({
             active={view === "history"}
             onClick={() => setView("history")}
           />
-          <MobileLink
-            icon={<User className="h-5 w-5" />}
-            label="마이"
-            active={false}
-            onClick={() => {}}
-          />
+          <MobileLink icon={<User className="h-5 w-5" />} label="마이" active={false} onClick={() => {}} />
         </nav>
 
-        <main
-          className="flex-1 overflow-x-hidden p-4 pb-20 sm:p-8 sm:pb-8"
-          style={{ backgroundColor: BG }}
-        >
+        <main className="flex-1 overflow-x-hidden p-4 pb-20 sm:p-8 sm:pb-8" style={{ backgroundColor: BG }}>
           {children}
         </main>
       </div>
@@ -386,14 +363,8 @@ function LoginView({ onContinue }: { onContinue: () => void }) {
   const [tab, setTab] = useState<"login" | "signup">("login");
 
   return (
-    <div
-      className="flex min-h-screen items-center justify-center px-4 py-10"
-      style={{ backgroundColor: BG }}
-    >
-      <div
-        className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm"
-        style={{ border: `1px solid ${BORDER}` }}
-      >
+    <div className="flex min-h-screen items-center justify-center px-4 py-10" style={{ backgroundColor: BG }}>
+      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm" style={{ border: `1px solid ${BORDER}` }}>
         <div className="mb-6 flex flex-col items-center gap-2">
           <div className="flex items-center gap-2">
             <Target className="h-7 w-7" style={{ color: RED }} />
@@ -433,9 +404,7 @@ function LoginView({ onContinue }: { onContinue: () => void }) {
         >
           <Input type="email" placeholder="이메일" autoComplete="email" />
           <Input type="password" placeholder="비밀번호" autoComplete="current-password" />
-          {tab === "signup" && (
-            <Input type="password" placeholder="비밀번호 확인" autoComplete="new-password" />
-          )}
+          {tab === "signup" && <Input type="password" placeholder="비밀번호 확인" autoComplete="new-password" />}
           <button
             type="button"
             onClick={() => onContinue()}
@@ -521,17 +490,11 @@ function UploadView({
         <Cloud className="h-12 w-12" style={{ color: RED }} />
         {file ? (
           <div className="flex flex-col items-center gap-1">
-            <div
-              className="flex items-center gap-2 text-sm font-medium"
-              style={{ color: INK }}
-            >
+            <div className="flex items-center gap-2 text-sm font-medium" style={{ color: INK }}>
               <FileVideo className="h-4 w-4" />
               {file.name}
             </div>
-            <span
-              className="text-xs"
-              style={{ color: tooBig ? RED : MUTED }}
-            >
+            <span className="text-xs" style={{ color: tooBig ? RED : MUTED }}>
               {sizeMB}MB {tooBig ? "(25MB 초과 — Whisper API 제한)" : ""}
             </span>
           </div>
@@ -632,7 +595,8 @@ async function extractAudioForWhisper(file: File): Promise<File> {
     return new File([await file.arrayBuffer()], "upload.wav", { type: file.type || "audio/wav" });
   }
 
-  const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  const AudioContextClass =
+    window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioContextClass) {
     throw new Error("이 브라우저는 영상 오디오 추출을 지원하지 않습니다. MP3/WAV 파일로 업로드해주세요.");
   }
@@ -716,13 +680,9 @@ function LoadingView({
         },
       )
       .then(async (res) => {
-        const data = (await res.json()) as
-          | { result: AnalysisResult; status: string }
-          | { error: string };
+        const data = (await res.json()) as { result: AnalysisResult; status: string } | { error: string };
         if (!res.ok || "error" in data) {
-          throw new Error(
-            "error" in data ? data.error : "분석에 실패했습니다",
-          );
+          throw new Error("error" in data ? data.error : "분석에 실패했습니다");
         }
         setActive(STEPS.length);
         setTimeout(() => onDone(data.result), 400);
@@ -735,7 +695,6 @@ function LoadingView({
         clearTimeout(t2);
         clearTimeout(t3);
       });
-
 
     return () => {
       clearTimeout(t1);
@@ -753,10 +712,7 @@ function LoadingView({
         영상 길이에 따라 30초~2분 소요됩니다
       </p>
 
-      <div
-        className="w-full rounded-2xl bg-white p-6 shadow-sm sm:p-10"
-        style={{ border: `1px solid ${BORDER}` }}
-      >
+      <div className="w-full rounded-2xl bg-white p-6 shadow-sm sm:p-10" style={{ border: `1px solid ${BORDER}` }}>
         <div className="relative grid grid-cols-4">
           {/* Progress line: spans from center of first circle to center of last circle.
               Circle is h-10 (2.5rem). Column has pt-5 (1.25rem) above the circle,
@@ -784,10 +740,7 @@ function LoadingView({
             const done = i < active;
             const current = i === active;
             return (
-              <div
-                key={label}
-                className="flex flex-col items-center gap-2 pt-5"
-              >
+              <div key={label} className="flex flex-col items-center gap-2 pt-5">
                 <div
                   className="relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white"
                   style={{ borderColor: done || current ? RED : "#D1D5DB" }}
@@ -812,7 +765,6 @@ function LoadingView({
             );
           })}
         </div>
-
       </div>
     </div>
   );
@@ -840,14 +792,10 @@ function TrendScoreCard({ score }: { score: ApiScore }) {
   const circ = 2 * Math.PI * radius;
   const offset = circ - (total / 100) * circ;
   const gaugeColor = total < 60 ? "#888888" : RED;
-  const badge =
-    total >= 80 ? "Great Potential" : total >= 60 ? "Good Potential" : "Needs Work";
+  const badge = total >= 80 ? "Great Potential" : total >= 60 ? "Good Potential" : "Needs Work";
 
   return (
-    <div
-      className="rounded-2xl bg-white p-6 shadow-sm sm:p-8"
-      style={{ border: `1px solid ${BORDER}` }}
-    >
+    <div className="rounded-2xl bg-white p-6 shadow-sm sm:p-8" style={{ border: `1px solid ${BORDER}` }}>
       <h3 className="mb-6 text-lg font-bold" style={{ color: INK }}>
         트렌드 점수
       </h3>
@@ -855,14 +803,7 @@ function TrendScoreCard({ score }: { score: ApiScore }) {
         <div className="flex shrink-0 flex-col items-center gap-3">
           <div className="relative h-44 w-44">
             <svg viewBox="0 0 180 180" className="h-full w-full -rotate-90">
-              <circle
-                cx="90"
-                cy="90"
-                r={radius}
-                stroke="#F0F0F0"
-                strokeWidth="14"
-                fill="none"
-              />
+              <circle cx="90" cy="90" r={radius} stroke="#F0F0F0" strokeWidth="14" fill="none" />
               <circle
                 cx="90"
                 cy="90"
@@ -896,26 +837,11 @@ function TrendScoreCard({ score }: { score: ApiScore }) {
         </div>
 
         <div className="flex flex-1 flex-col gap-4 self-stretch">
-          <SubScore
-            label="제목 키워드 적합도"
-            value={score.keyword_score}
-            comment={score.keyword_comment}
-          />
-          <SubScore
-            label="시각적 트렌드 부합도"
-            value={score.visual_score}
-            comment={score.visual_comment}
-          />
-          <SubScore
-            label="콘텐츠 주제 관련성"
-            value={score.topic_score}
-            comment={score.topic_comment}
-          />
+          <SubScore label="제목 키워드 적합도" value={score.keyword_score} comment={score.keyword_comment} />
+          <SubScore label="시각적 트렌드 부합도" value={score.visual_score} comment={score.visual_comment} />
+          <SubScore label="콘텐츠 주제 관련성" value={score.topic_score} comment={score.topic_comment} />
           {score.comment && (
-            <p
-              className="mt-2 rounded-lg p-3 text-xs leading-relaxed"
-              style={{ backgroundColor: BG, color: INK }}
-            >
+            <p className="mt-2 rounded-lg p-3 text-xs leading-relaxed" style={{ backgroundColor: BG, color: INK }}>
               {score.comment}
             </p>
           )}
@@ -925,15 +851,7 @@ function TrendScoreCard({ score }: { score: ApiScore }) {
   );
 }
 
-function SubScore({
-  label,
-  value,
-  comment,
-}: {
-  label: string;
-  value: number;
-  comment?: string;
-}) {
+function SubScore({ label, value, comment }: { label: string; value: number; comment?: string }) {
   return (
     <div>
       <div className="mb-1 flex justify-between text-xs">
@@ -943,10 +861,7 @@ function SubScore({
         </span>
       </div>
       <div className="h-2 overflow-hidden rounded-full" style={{ backgroundColor: BG }}>
-        <div
-          className="h-full rounded-full"
-          style={{ width: `${value}%`, backgroundColor: RED }}
-        />
+        <div className="h-full rounded-full" style={{ width: `${value}%`, backgroundColor: RED }} />
       </div>
       {comment && (
         <p className="mt-1 text-[11px]" style={{ color: MUTED }}>
@@ -960,10 +875,7 @@ function SubScore({
 function TitlesCard({ titles }: { titles: ApiTitle[] }) {
   const [copied, setCopied] = useState<number | null>(null);
   return (
-    <div
-      className="rounded-2xl bg-white p-6 shadow-sm sm:p-8"
-      style={{ border: `1px solid ${BORDER}` }}
-    >
+    <div className="rounded-2xl bg-white p-6 shadow-sm sm:p-8" style={{ border: `1px solid ${BORDER}` }}>
       <h3 className="mb-4 text-lg font-bold" style={{ color: INK }}>
         클릭을 부르는 제목 추천
       </h3>
@@ -998,11 +910,7 @@ function TitlesCard({ titles }: { titles: ApiTitle[] }) {
                 style={{ color: copied === i ? RED : MUTED }}
                 aria-label="copy"
               >
-                {copied === i ? (
-                  <Check className="h-4 w-4" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
+                {copied === i ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               </button>
             </div>
           </div>
@@ -1015,10 +923,7 @@ function TitlesCard({ titles }: { titles: ApiTitle[] }) {
 function ThumbnailsCard({ thumbnails }: { thumbnails: ApiThumb[] }) {
   const [openIdx, setOpenIdx] = useState<number | null>(null);
   return (
-    <div
-      className="rounded-2xl bg-white p-6 shadow-sm sm:p-8"
-      style={{ border: `1px solid ${BORDER}` }}
-    >
+    <div className="rounded-2xl bg-white p-6 shadow-sm sm:p-8" style={{ border: `1px solid ${BORDER}` }}>
       <h3 className="text-lg font-bold" style={{ color: INK }}>
         AI 완성형 썸네일
       </h3>
@@ -1064,21 +969,21 @@ function ThumbnailsCard({ thumbnails }: { thumbnails: ApiThumb[] }) {
                   <Download className="h-3.5 w-3.5" /> 썸네일 다운로드
                 </a>
               )}
-            <button
-              onClick={() => setOpenIdx(openIdx === i ? null : i)}
-              className="flex items-center justify-center gap-1 text-xs"
-              style={{ color: MUTED }}
-            >
-              프롬프트 보기 {openIdx === i ? "▴" : "▾"}
-            </button>
-            {openIdx === i && (
-              <pre
-                className="whitespace-pre-wrap break-words rounded-md p-2 text-[10px] leading-relaxed"
-                style={{ backgroundColor: BG, color: INK }}
+              <button
+                onClick={() => setOpenIdx(openIdx === i ? null : i)}
+                className="flex items-center justify-center gap-1 text-xs"
+                style={{ color: MUTED }}
               >
-                {t.prompt}
-              </pre>
-            )}
+                프롬프트 보기 {openIdx === i ? "▴" : "▾"}
+              </button>
+              {openIdx === i && (
+                <pre
+                  className="whitespace-pre-wrap break-words rounded-md p-2 text-[10px] leading-relaxed"
+                  style={{ backgroundColor: BG, color: INK }}
+                >
+                  {t.prompt}
+                </pre>
+              )}
             </div>
           );
         })}
@@ -1091,10 +996,13 @@ function ThumbnailsCard({ thumbnails }: { thumbnails: ApiThumb[] }) {
 
 function renderMarkdownReport(md: string) {
   // ## 헤더 기준으로 섹션 분리
-  const blocks = md.split(/\n(?=##\s)/g).map((b) => b.trim()).filter(Boolean);
+  const blocks = md
+    .split(/\n(?=##\s)/g)
+    .map((b) => b.trim())
+    .filter(Boolean);
   return blocks.map((block, i) => {
     const lines = block.split("\n");
-    const headerLine = lines[0]?.startsWith("##") ? lines.shift() ?? "" : "";
+    const headerLine = lines[0]?.startsWith("##") ? (lines.shift() ?? "") : "";
     const title = headerLine
       .replace(/^#+\s*/, "")
       .replace(/\*\*(.+?)\*\*/g, "$1")
@@ -1105,11 +1013,7 @@ function renderMarkdownReport(md: string) {
         {title && (
           <>
             <div className="flex items-center gap-2">
-              <span
-                className="inline-block h-3 w-3"
-                style={{ backgroundColor: RED }}
-                aria-hidden
-              />
+              <span className="inline-block h-3 w-3" style={{ backgroundColor: RED }} aria-hidden />
               <h4 className="text-[15px] font-bold" style={{ color: INK }}>
                 {title}
               </h4>
@@ -1117,10 +1021,7 @@ function renderMarkdownReport(md: string) {
             <div className="mt-2 h-px w-full" style={{ backgroundColor: BORDER }} />
           </>
         )}
-        <div
-          className="mt-4 whitespace-pre-wrap text-[15px]"
-          style={{ color: "#333333", lineHeight: 1.8 }}
-        >
+        <div className="mt-4 whitespace-pre-wrap text-[15px]" style={{ color: "#333333", lineHeight: 1.8 }}>
           {body
             .replace(/^\s*#{1,6}\s*/gm, "")
             .replace(/#{2,6}\s*/g, "")
@@ -1149,9 +1050,8 @@ function ReportCard({ result }: { result: AnalysisResult }) {
               AI 상세 분석 리포트
             </h3>
             <p className="mt-1.5 text-xs sm:text-sm" style={{ color: MUTED }}>
-              [카테고리] {result.category} &nbsp;|&nbsp; 분석일: {date}{" "}
-              &nbsp;|&nbsp; 종합 점수: {result.score.total} / 100 &nbsp;|&nbsp; WPM:{" "}
-              {result.wpm}
+              [카테고리] {result.category} &nbsp;|&nbsp; 분석일: {date} &nbsp;|&nbsp; 종합 점수: {result.score.total} /
+              100 &nbsp;|&nbsp; WPM: {result.wpm}
             </p>
           </div>
           <button
@@ -1168,16 +1068,10 @@ function ReportCard({ result }: { result: AnalysisResult }) {
 
         {result.transcript_preview && (
           <details className="mt-6">
-            <summary
-              className="cursor-pointer text-xs font-semibold"
-              style={{ color: MUTED }}
-            >
+            <summary className="cursor-pointer text-xs font-semibold" style={{ color: MUTED }}>
               대본 미리보기 (첫 500자)
             </summary>
-            <p
-              className="mt-2 rounded-lg p-3 text-xs leading-relaxed"
-              style={{ backgroundColor: BG, color: INK }}
-            >
+            <p className="mt-2 rounded-lg p-3 text-xs leading-relaxed" style={{ backgroundColor: BG, color: INK }}>
               {result.transcript_preview}
             </p>
           </details>
@@ -1191,10 +1085,7 @@ function ReportCard({ result }: { result: AnalysisResult }) {
           </label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="relative flex-1">
-              <Mail
-                className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
-                style={{ color: MUTED }}
-              />
+              <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: MUTED }} />
               <input
                 type="email"
                 value={email}
@@ -1256,11 +1147,7 @@ function ReportCard({ result }: { result: AnalysisResult }) {
             <p
               className="text-xs"
               style={{
-                color: sendMsg.startsWith("✓")
-                  ? "#16A34A"
-                  : sendMsg.startsWith("✗")
-                    ? "#A70100"
-                    : MUTED,
+                color: sendMsg.startsWith("✓") ? "#16A34A" : sendMsg.startsWith("✗") ? "#A70100" : MUTED,
               }}
             >
               {sendMsg}
