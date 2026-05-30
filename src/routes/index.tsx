@@ -1095,7 +1095,10 @@ function renderMarkdownReport(md: string) {
   return blocks.map((block, i) => {
     const lines = block.split("\n");
     const headerLine = lines[0]?.startsWith("##") ? lines.shift() ?? "" : "";
-    const title = headerLine.replace(/^#+\s*/, "").trim();
+    const title = headerLine
+      .replace(/^#+\s*/, "")
+      .replace(/\*\*(.+?)\*\*/g, "$1")
+      .trim();
     const body = lines.join("\n").trim();
     return (
       <section key={i} className="flex flex-col">
