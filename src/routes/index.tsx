@@ -1119,7 +1119,8 @@ function renderMarkdownReport(md: string) {
           style={{ color: "#333333", lineHeight: 1.8 }}
         >
           {body
-            .replace(/^#{1,6}\s+/gm, "")
+            .replace(/^\s*#{1,6}\s*/gm, "")
+            .replace(/#{2,6}\s*/g, "")
             .replace(/\*\*(.+?)\*\*/g, "$1")}
         </div>
       </section>
