@@ -1118,7 +1118,9 @@ function renderMarkdownReport(md: string) {
           className="mt-4 whitespace-pre-wrap text-[15px]"
           style={{ color: "#333333", lineHeight: 1.8 }}
         >
-          {body.replace(/\*\*(.+?)\*\*/g, "$1")}
+          {body
+            .replace(/^#{1,6}\s+/gm, "")
+            .replace(/\*\*(.+?)\*\*/g, "$1")}
         </div>
       </section>
     );
