@@ -1247,7 +1247,16 @@ function ReportCard({ result }: { result: AnalysisResult }) {
             </button>
           </div>
           {sendMsg && (
-            <p className="text-xs" style={{ color: MUTED }}>
+            <p
+              className="text-xs"
+              style={{
+                color: sendMsg.startsWith("✓")
+                  ? "#16A34A"
+                  : sendMsg.startsWith("✗")
+                    ? "#A70100"
+                    : MUTED,
+              }}
+            >
               {sendMsg}
             </p>
           )}
