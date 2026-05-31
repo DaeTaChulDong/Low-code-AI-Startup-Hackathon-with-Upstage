@@ -157,7 +157,7 @@ export const deleteAnalysis = createServerFn({ method: "POST" })
 export const searchAnalyses = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => SearchSchema.parse(input))
   .handler(async ({ data }): Promise<StoredAnalysis[]> => {
-    const vector = await embed(data.query);
+    const vector = await embed(data.query, "query");
     if (!vector) {
       throw new Error("검색 쿼리 임베딩 생성에 실패했습니다.");
     }
