@@ -33,6 +33,21 @@ const SearchSchema = z.object({
   limit: z.number().int().min(1).max(20).optional(),
 });
 
+const AskSchema = z.object({
+  session_id: SessionIdSchema,
+  id: z.string().uuid().optional(),
+  transcript: z.string().min(1).max(50000).optional(),
+  question: z.string().min(1).max(1000),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().min(1).max(4000),
+      }),
+    )
+    .max(20)
+    .optional(),
+});
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type StoredAnalysis = {
   id: string;
