@@ -14,7 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      analyses: {
+        Row: {
+          category: string | null
+          created_at: string
+          extracted: Json | null
+          filename: string | null
+          id: string
+          result: Json
+          score_total: number | null
+          session_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          extracted?: Json | null
+          filename?: string | null
+          id?: string
+          result: Json
+          score_total?: number | null
+          session_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          extracted?: Json | null
+          filename?: string | null
+          id?: string
+          result?: Json
+          score_total?: number | null
+          session_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
