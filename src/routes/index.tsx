@@ -20,6 +20,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import {
+  askAnalysis,
   listAnalyses,
   saveAnalysis,
   searchAnalyses,
