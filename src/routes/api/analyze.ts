@@ -26,6 +26,110 @@ export type ExtractedInsights = {
   suggested_tags: string[];
 };
 
+export const AUTO_CATEGORIES = [
+  "정보/지식",
+  "엔터테인먼트",
+  "감성/스토리",
+  "리뷰/언박싱",
+  "튜토리얼/하우투",
+  "브이로그/일상",
+  "뉴스/시사",
+  "교육/강의",
+  "라이프스타일",
+  "기타",
+] as const;
+
+export type AutoCategory = {
+  primary_category: string;
+  sub_category: string;
+  confidence: number;
+  reasoning: string;
+  related_categories: string[];
+};
+
+async function classifyAutoCategory(
+  upstageKey: string,
+  script: string,
+  userCategory: string,
+): Promise<AutoCategory | null> {
+  const schema = {
+    type: "object",
+    properties: {
+      primary_category: {
+        type: "string",
+        enum: [...AUTO_CATEGORIES],
+        description: "이 영상이 가장 잘 부합하는 1차 카테고리 (반드시 enum 중 하나)",
+      },
+      sub_category: {
+        type: "string",
+        description: "더 구체적인 세부 카테고리/장르 (한국어, 짧은 명사구)",
+      },
+      confidence: {
+        type: "integer",
+        description: "1차 카테고리 분류 신뢰도 0~100",
+      },
+      reasoning: {
+        type: "string",
+        description: "이 카테고리로 분류한 핵심 근거 한 문장 (한국어)",
+      },
+      related_categories: {
+        type: "array",
+        items: { type: "string", enum: [...AUTO_CATEGORIES] },
+        description: "함께 어울리는 보조 카테고리 0~2개",
+      },
+    },
+    required: [
+      "primary_category",
+      "sub_category",
+      "confidence",
+      "reasoning",
+      "related_categories",
+    ],
+    additionalProperties: false,
+  };
+
+  try {
+    const res = await fetch(UPSTAGE_IE_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${upstageKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: UPSTAGE_IE_MODEL,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `당신은 유튜브 콘텐츠 분류 엔진입니다. 다음 영상 대본을 분석하여 가장 적합한 카테고리로 분류하세요. 사용자가 선택한 카테고리는 '${userCategory}' 이지만, 실제 대본 내용에 기반하여 객관적으로 판단하세요.\n\n[대본]\n${script.slice(0, 5000)}`,
+              },
+            ],
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: "auto_category", strict: true, schema },
+        },
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      console.error(`Upstage Classify error ${res.status}: ${text.slice(0, 300)}`);
+      return null;
+    }
+    const data = (await res.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const content = data.choices?.[0]?.message?.content ?? "";
+    return JSON.parse(content) as AutoCategory;
+  } catch (e) {
+    console.error("Auto-classify failed:", e);
+    return null;
+  }
+}
+
 async function extractInsights(
   upstageKey: string,
   script: string,
@@ -550,12 +654,13 @@ export const Route = createFileRoute("/api/analyze")({
           // Phase 2: 트렌드 점수 (Solar)
           const score = await calculateTrendScore(solarKey, script, category);
 
-          // Phase 3: 제목 + 썸네일 + 리포트 + Upstage IE 인사이트 병렬
-          const [titles, thumbnails, report, extracted] = await Promise.all([
+          // Phase 3: 제목 + 썸네일 + 리포트 + Upstage IE 인사이트 + 자동 카테고리 병렬
+          const [titles, thumbnails, report, extracted, autoCategory] = await Promise.all([
             generateTitles(solarKey, script, category, customPrompt),
             generateThumbnails(openaiKey, solarKey, script, category, customPrompt),
             generateReport(solarKey, script, score, category),
             extractInsights(solarKey, script, category),
+            classifyAutoCategory(solarKey, script, category),
           ]);
 
           return Response.json({
@@ -566,6 +671,7 @@ export const Route = createFileRoute("/api/analyze")({
               thumbnails,
               report,
               extracted,
+              auto_category: autoCategory,
               transcript_preview: script.slice(0, 500),
               wpm: transcript.wpm,
               category,
