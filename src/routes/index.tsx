@@ -230,14 +230,29 @@ function Index() {
             onDone={(r) => {
               const enriched: AnalysisResult = { ...r, filename: file.name };
               setResult(enriched);
-              const item: HistoryItem = {
-                filename: file.name,
-                category: r.category,
-                date: r.analyzed_at.slice(0, 10),
-                score: r.score.total,
-                result: enriched,
-              };
-              void loadHistory().then((prev) => saveHistory([item, ...prev]));
+              // Cloud에 저장 (실패해도 사용자 흐름은 방해하지 않음)
+              void saveAnalysisFn({
+                data: {
+                  session_id: getSessionId(),
+                  filename: file.name,
+                  category: r.category,
+                  score_total: r.score.total,
+                  result: enriched,
+                  extracted: r.extracted ?? null,
+                },
+              }).catch((e) => {
+                console.error("Cloud save failed; falling back to local:", e);
+                const item: HistoryItem = {
+                  filename: file.name,
+                  category: r.category,
+                  date: r.analyzed_at.slice(0, 10),
+                  score: r.score.total,
+                  result: enriched,
+                };
+                void loadHistoryLocal().then((prev) =>
+                  saveHistoryLocal([item, ...prev]),
+                );
+              });
               setView("results");
             }}
             onError={(msg) => {
