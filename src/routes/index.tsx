@@ -841,9 +841,87 @@ function ResultsView({ result }: { result: AnalysisResult }) {
         분석 결과
       </h2>
       <TrendScoreCard score={result.score} />
+      {result.extracted && <InsightsCard insights={result.extracted} />}
       <TitlesCard titles={result.titles} />
       <ThumbnailsCard thumbnails={result.thumbnails} />
       <ReportCard result={result} />
+    </div>
+  );
+}
+
+function InsightsCard({ insights }: { insights: ExtractedInsights }) {
+  const sections: Array<{ label: string; items: string[] }> = [
+    { label: "핵심 주제", items: insights.key_topics ?? [] },
+    { label: "감정 후킹 포인트", items: insights.emotional_hooks ?? [] },
+    { label: "썸네일 후보 장면", items: insights.visual_moments ?? [] },
+    { label: "행동 유도 (CTA)", items: insights.call_to_actions ?? [] },
+    { label: "콘텐츠 기둥", items: insights.content_pillars ?? [] },
+  ];
+  return (
+    <div
+      className="rounded-2xl bg-white p-6 shadow-sm sm:p-8"
+      style={{ border: `1px solid ${BORDER}` }}
+    >
+      <div className="mb-4 flex items-center gap-2">
+        <Sparkles className="h-5 w-5" style={{ color: RED }} />
+        <h3 className="text-lg font-bold" style={{ color: INK }}>
+          AI 추출 인사이트
+        </h3>
+        <span className="text-[11px]" style={{ color: MUTED }}>
+          Powered by Upstage Information Extract
+        </span>
+      </div>
+
+      {insights.target_audience && (
+        <div className="mb-4 rounded-lg p-3 text-sm" style={{ backgroundColor: BG, color: INK }}>
+          <span className="mr-2 font-semibold" style={{ color: RED }}>
+            타겟 시청자
+          </span>
+          {insights.target_audience}
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {sections.map((s) =>
+          s.items.length === 0 ? null : (
+            <div key={s.label}>
+              <p className="mb-2 text-xs font-semibold" style={{ color: MUTED }}>
+                {s.label}
+              </p>
+              <ul className="flex flex-col gap-1.5">
+                {s.items.map((it, i) => (
+                  <li
+                    key={i}
+                    className="rounded-md px-2.5 py-1.5 text-xs leading-relaxed"
+                    style={{ backgroundColor: BG, color: INK }}
+                  >
+                    {it}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ),
+        )}
+      </div>
+
+      {insights.suggested_tags && insights.suggested_tags.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-semibold" style={{ color: MUTED }}>
+            추천 태그
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {insights.suggested_tags.map((tag, i) => (
+              <span
+                key={i}
+                className="rounded-full px-2.5 py-1 text-[11px] font-medium"
+                style={{ backgroundColor: BG, color: INK, border: `1px solid ${BORDER}` }}
+              >
+                #{tag.replace(/^#/, "")}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
