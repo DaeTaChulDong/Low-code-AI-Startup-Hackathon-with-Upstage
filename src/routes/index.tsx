@@ -1275,10 +1275,31 @@ function HistoryView({ onOpen }: { onOpen: (r: AnalysisResult) => void }) {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <h2 className="mb-6 text-2xl font-bold" style={{ color: INK }}>
-        분석 히스토리
-      </h2>
-      {items.length === 0 ? (
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <h2 className="text-2xl font-bold" style={{ color: INK }}>
+          분석 히스토리
+        </h2>
+        <span
+          className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+          style={{
+            backgroundColor: source === "cloud" ? RED : BG,
+            color: source === "cloud" ? "white" : MUTED,
+          }}
+        >
+          {source === "cloud" ? "Cloud 동기화" : "로컬 저장"}
+        </span>
+      </div>
+      {loading ? (
+        <div
+          className="flex flex-col items-center gap-3 rounded-2xl bg-white p-12 shadow-sm"
+          style={{ border: `1px solid ${BORDER}` }}
+        >
+          <Loader2 className="h-8 w-8 animate-spin" style={{ color: RED }} />
+          <p className="text-sm" style={{ color: MUTED }}>
+            히스토리를 불러오는 중...
+          </p>
+        </div>
+      ) : items.length === 0 ? (
         <div
           className="flex flex-col items-center gap-3 rounded-2xl bg-white p-12 shadow-sm"
           style={{ border: `1px solid ${BORDER}` }}
