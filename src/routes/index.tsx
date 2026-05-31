@@ -537,18 +537,20 @@ function UploadView({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const sizeMB = file ? (file.size / (1024 * 1024)).toFixed(1) : null;
-  const tooBig = file ? file.size > 25 * 1024 * 1024 : false;
+  const isDoc = file ? isDocumentFile(file) : false;
+  const maxBytes = isDoc ? 50 * 1024 * 1024 : 25 * 1024 * 1024;
+  const tooBig = file ? file.size > maxBytes : false;
 
   return (
     <div className="mx-auto max-w-3xl">
       <h2 className="mb-6 text-2xl font-bold" style={{ color: INK }}>
-        새 영상 분석
+        새 콘텐츠 분석
       </h2>
 
       <input
         ref={inputRef}
         type="file"
-        accept="video/*,audio/*"
+        accept="video/*,audio/*,application/pdf,image/*"
         className="hidden"
         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
       />
@@ -565,13 +567,23 @@ function UploadView({
               {file.name}
             </div>
             <span className="text-xs" style={{ color: tooBig ? RED : MUTED }}>
-              {sizeMB}MB {tooBig ? "(25MB 초과 — Whisper API 제한)" : ""}
+              {isDoc ? "문서" : "영상/오디오"} · {sizeMB}MB{" "}
+              {tooBig
+                ? isDoc
+                  ? "(50MB 초과)"
+                  : "(25MB 초과 — Whisper API 제한)"
+                : ""}
             </span>
           </div>
         ) : (
-          <p className="text-sm" style={{ color: MUTED }}>
-            영상 파일을 클릭해서 업로드 (최대 25MB · MP4/MP3 권장)
-          </p>
+          <div className="flex flex-col items-center gap-1">
+            <p className="text-sm" style={{ color: MUTED }}>
+              영상·오디오 또는 문서를 클릭해서 업로드
+            </p>
+            <p className="text-[11px]" style={{ color: MUTED }}>
+              MP4·MP3 (최대 25MB) · PDF·이미지 (최대 50MB, Upstage Document Parse)
+            </p>
+          </div>
         )}
       </button>
 
