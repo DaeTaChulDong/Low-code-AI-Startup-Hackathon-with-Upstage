@@ -518,6 +518,14 @@ const CATEGORIES = [
   "Pets & Animals",
 ];
 
+function isDocumentFile(file: File): boolean {
+  const t = (file.type || "").toLowerCase();
+  if (t === "application/pdf") return true;
+  if (t.startsWith("image/")) return true;
+  const name = (file.name || "").toLowerCase();
+  return /\.(pdf|png|jpe?g|webp|tiff?|bmp|heic)$/.test(name);
+}
+
 function UploadView({
   file,
   setFile,
@@ -537,18 +545,20 @@ function UploadView({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const sizeMB = file ? (file.size / (1024 * 1024)).toFixed(1) : null;
-  const tooBig = file ? file.size > 25 * 1024 * 1024 : false;
+  const isDoc = file ? isDocumentFile(file) : false;
+  const maxBytes = isDoc ? 50 * 1024 * 1024 : 25 * 1024 * 1024;
+  const tooBig = file ? file.size > maxBytes : false;
 
   return (
     <div className="mx-auto max-w-3xl">
       <h2 className="mb-6 text-2xl font-bold" style={{ color: INK }}>
-        새 영상 분석
+        새 콘텐츠 분석
       </h2>
 
       <input
         ref={inputRef}
         type="file"
-        accept="video/*,audio/*"
+        accept="video/*,audio/*,application/pdf,image/*"
         className="hidden"
         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
       />
@@ -565,13 +575,23 @@ function UploadView({
               {file.name}
             </div>
             <span className="text-xs" style={{ color: tooBig ? RED : MUTED }}>
-              {sizeMB}MB {tooBig ? "(25MB 초과 — Whisper API 제한)" : ""}
+              {isDoc ? "문서" : "영상/오디오"} · {sizeMB}MB{" "}
+              {tooBig
+                ? isDoc
+                  ? "(50MB 초과)"
+                  : "(25MB 초과 — Whisper API 제한)"
+                : ""}
             </span>
           </div>
         ) : (
-          <p className="text-sm" style={{ color: MUTED }}>
-            영상 파일을 클릭해서 업로드 (최대 25MB · MP4/MP3 권장)
-          </p>
+          <div className="flex flex-col items-center gap-1">
+            <p className="text-sm" style={{ color: MUTED }}>
+              영상·오디오 또는 문서를 클릭해서 업로드
+            </p>
+            <p className="text-[11px]" style={{ color: MUTED }}>
+              MP4·MP3 (최대 25MB) · PDF·이미지 (최대 50MB, Upstage Document Parse)
+            </p>
+          </div>
         )}
       </button>
 
@@ -723,32 +743,46 @@ function LoadingView({
     if (startedRef.current) return;
     startedRef.current = true;
 
+    const isDoc = isDocumentFile(file);
+
     // 시각적 진행 (실제 API 응답 전까지 단계별 애니메이션)
     const t1 = setTimeout(() => setActive(1), 800);
     const t2 = setTimeout(() => setActive(2), 4000);
     const t3 = setTimeout(() => setActive(3), 12000);
 
-    extractAudioForWhisper(file)
-      .then(
-        (audioFile) => {
-          const fd = new FormData();
-          fd.append("audio", audioFile, "upload.wav");
-          fd.append("original_filename", file.name);
-          fd.append("category", category);
-          fd.append("custom_prompt", customPrompt);
-          return fetch("/api/analyze", { method: "POST", body: fd });
-        },
-        // Fallback: browser couldn't decode the video's audio track.
-        // Send the original file as `video` and let Whisper handle it server-side.
-        () => {
-          const fd = new FormData();
-          fd.append("video", file, file.name);
-          fd.append("original_filename", file.name);
-          fd.append("category", category);
-          fd.append("custom_prompt", customPrompt);
-          return fetch("/api/analyze", { method: "POST", body: fd });
-        },
-      )
+    const sendDocument = (): Promise<Response> => {
+      const fd = new FormData();
+      fd.append("document", file, file.name);
+      fd.append("original_filename", file.name);
+      fd.append("category", category);
+      fd.append("custom_prompt", customPrompt);
+      return fetch("/api/analyze", { method: "POST", body: fd });
+    };
+
+    const requestPromise: Promise<Response> = isDoc
+      ? sendDocument()
+      : extractAudioForWhisper(file).then(
+          (audioFile) => {
+            const fd = new FormData();
+            fd.append("audio", audioFile, "upload.wav");
+            fd.append("original_filename", file.name);
+            fd.append("category", category);
+            fd.append("custom_prompt", customPrompt);
+            return fetch("/api/analyze", { method: "POST", body: fd });
+          },
+          // Fallback: browser couldn't decode the video's audio track.
+          // Send the original file as `video` and let Whisper handle it server-side.
+          () => {
+            const fd = new FormData();
+            fd.append("video", file, file.name);
+            fd.append("original_filename", file.name);
+            fd.append("category", category);
+            fd.append("custom_prompt", customPrompt);
+            return fetch("/api/analyze", { method: "POST", body: fd });
+          },
+        );
+
+    requestPromise
       .then(async (res) => {
         const data = (await res.json()) as { result: AnalysisResult; status: string } | { error: string };
         if (!res.ok || "error" in data) {

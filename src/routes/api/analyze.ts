@@ -13,8 +13,48 @@ const SOLAR_URL = "https://api.upstage.ai/v1/solar/chat/completions";
 const SOLAR_MODEL = "solar-pro2";
 const UPSTAGE_IE_URL = "https://api.upstage.ai/v1/information-extraction";
 const UPSTAGE_IE_MODEL = "information-extract";
+const UPSTAGE_PARSE_URL = "https://api.upstage.ai/v1/document-digitization";
+const UPSTAGE_PARSE_MODEL = "document-parse";
 
 const OPENAI_BASE = "https://api.openai.com/v1";
+
+async function parseDocument(
+  upstageKey: string,
+  doc: File,
+): Promise<{ text: string; pages: number }> {
+  const buf = await doc.arrayBuffer();
+  const blob = new Blob([buf], { type: doc.type || "application/pdf" });
+  const fd = new FormData();
+  fd.append("document", blob, doc.name || "upload.pdf");
+  fd.append("model", UPSTAGE_PARSE_MODEL);
+  fd.append("ocr", "auto");
+  fd.append("output_formats", '["markdown"]');
+  fd.append("coordinates", "false");
+  fd.append("base64_encoding", "[]");
+
+  const res = await fetch(UPSTAGE_PARSE_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${upstageKey}` },
+    body: fd,
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Upstage Document Parse error ${res.status}: ${t.slice(0, 300)}`);
+  }
+  const data = (await res.json()) as {
+    content?: { markdown?: string; text?: string; html?: string };
+    elements?: Array<{ content?: { markdown?: string; text?: string } }>;
+    usage?: { pages?: number };
+  };
+  let text = data.content?.markdown ?? data.content?.text ?? "";
+  if (!text && Array.isArray(data.elements)) {
+    text = data.elements
+      .map((el) => el.content?.markdown ?? el.content?.text ?? "")
+      .filter(Boolean)
+      .join("\n\n");
+  }
+  return { text: text.trim(), pages: data.usage?.pages ?? 0 };
+}
 
 export type ExtractedInsights = {
   target_audience: string;
@@ -626,29 +666,64 @@ export const Route = createFileRoute("/api/analyze")({
 
         const audio = form.get("audio");
         const video = form.get("video");
+        const document = form.get("document");
         const category = (form.get("category") as string) || "Entertainment";
         const customPrompt = (form.get("custom_prompt") as string) || "";
-        const media = audio instanceof File ? audio : video;
+
+        const isDocument = document instanceof File;
+        const media = isDocument
+          ? (document as File)
+          : audio instanceof File
+            ? audio
+            : video;
 
         if (!(media instanceof File)) {
-          return Response.json({ error: "audio 또는 video 파일이 필요합니다." }, { status: 400 });
-        }
-        if (media.size > 25 * 1024 * 1024) {
           return Response.json(
-            { error: "오디오 파일이 25MB를 초과합니다. 더 짧은 영상을 사용해주세요." },
+            { error: "audio, video 또는 document 파일이 필요합니다." },
+            { status: 400 },
+          );
+        }
+        const maxBytes = isDocument ? 50 * 1024 * 1024 : 25 * 1024 * 1024;
+        if (media.size > maxBytes) {
+          return Response.json(
+            {
+              error: isDocument
+                ? "문서 파일이 50MB를 초과합니다."
+                : "오디오 파일이 25MB를 초과합니다. 더 짧은 영상을 사용해주세요.",
+            },
             { status: 400 },
           );
         }
 
         try {
-          // Phase 1: 대본 추출 (Whisper)
-          const transcript = await transcribeWithWhisper(openaiKey, media);
-          const script = transcript.text;
-          if (!script || script.length < 5) {
-            return Response.json(
-              { error: "대본 추출에 실패했거나 음성이 감지되지 않았습니다." },
-              { status: 422 },
-            );
+          // Phase 1: 텍스트 추출 (Whisper or Upstage Document Parse)
+          let script: string;
+          let wpm = 0;
+          let sourceKind: "audio" | "video" | "document" = "audio";
+          let pages = 0;
+
+          if (isDocument) {
+            sourceKind = "document";
+            const parsed = await parseDocument(solarKey, media);
+            script = parsed.text;
+            pages = parsed.pages;
+            if (!script || script.length < 5) {
+              return Response.json(
+                { error: "문서에서 텍스트를 추출하지 못했습니다." },
+                { status: 422 },
+              );
+            }
+          } else {
+            sourceKind = audio instanceof File ? "audio" : "video";
+            const transcript = await transcribeWithWhisper(openaiKey, media);
+            script = transcript.text;
+            wpm = transcript.wpm;
+            if (!script || script.length < 5) {
+              return Response.json(
+                { error: "대본 추출에 실패했거나 음성이 감지되지 않았습니다." },
+                { status: 422 },
+              );
+            }
           }
 
           // Phase 2: 트렌드 점수 (Solar)
@@ -673,7 +748,9 @@ export const Route = createFileRoute("/api/analyze")({
               extracted,
               auto_category: autoCategory,
               transcript_preview: script.slice(0, 500),
-              wpm: transcript.wpm,
+              wpm,
+              source_kind: sourceKind,
+              document_pages: pages,
               category,
               analyzed_at: new Date().toISOString(),
             },
