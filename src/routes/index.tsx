@@ -518,6 +518,14 @@ const CATEGORIES = [
   "Pets & Animals",
 ];
 
+function isDocumentFile(file: File): boolean {
+  const t = (file.type || "").toLowerCase();
+  if (t === "application/pdf") return true;
+  if (t.startsWith("image/")) return true;
+  const name = (file.name || "").toLowerCase();
+  return /\.(pdf|png|jpe?g|webp|tiff?|bmp|heic)$/.test(name);
+}
+
 function UploadView({
   file,
   setFile,
