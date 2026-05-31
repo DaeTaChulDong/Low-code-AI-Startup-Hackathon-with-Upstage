@@ -748,6 +748,7 @@ export const Route = createFileRoute("/api/analyze")({
               extracted,
               auto_category: autoCategory,
               transcript_preview: script.slice(0, 500),
+              transcript: script,
               wpm,
               source_kind: sourceKind,
               document_pages: pages,
