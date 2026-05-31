@@ -550,11 +550,12 @@ export const Route = createFileRoute("/api/analyze")({
           // Phase 2: 트렌드 점수 (Solar)
           const score = await calculateTrendScore(solarKey, script, category);
 
-          // Phase 3: 제목 + 썸네일 + 리포트 병렬
-          const [titles, thumbnails, report] = await Promise.all([
+          // Phase 3: 제목 + 썸네일 + 리포트 + Upstage IE 인사이트 병렬
+          const [titles, thumbnails, report, extracted] = await Promise.all([
             generateTitles(solarKey, script, category, customPrompt),
             generateThumbnails(openaiKey, solarKey, script, category, customPrompt),
             generateReport(solarKey, script, score, category),
+            extractInsights(solarKey, script, category),
           ]);
 
           return Response.json({
@@ -564,6 +565,7 @@ export const Route = createFileRoute("/api/analyze")({
               titles,
               thumbnails,
               report,
+              extracted,
               transcript_preview: script.slice(0, 500),
               wpm: transcript.wpm,
               category,
