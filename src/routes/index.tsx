@@ -1447,7 +1447,12 @@ function HistoryView({ onOpen }: { onOpen: (r: AnalysisResult) => void }) {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [source, setSource] = useState<"cloud" | "local">("cloud");
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<HistoryItem[] | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const listAnalysesFn = useServerFn(listAnalyses);
+  const searchAnalysesFn = useServerFn(searchAnalyses);
 
   useEffect(() => {
     let cancelled = false;
@@ -1460,7 +1465,6 @@ function HistoryView({ onOpen }: { onOpen: (r: AnalysisResult) => void }) {
         });
         if (cancelled) return;
         const cloud = rows.map(storedToHistoryItem);
-        // Cloud가 비어 있다면 로컬 폴백도 시도 (마이그레이션 편의)
         if (cloud.length === 0) {
           const local = await loadHistoryLocal();
           if (cancelled) return;
@@ -1493,6 +1497,37 @@ function HistoryView({ onOpen }: { onOpen: (r: AnalysisResult) => void }) {
     };
   }, [listAnalysesFn]);
 
+  const runSearch = async () => {
+    const q = query.trim();
+    if (!q) {
+      setSearchResults(null);
+      setSearchError(null);
+      return;
+    }
+    setSearching(true);
+    setSearchError(null);
+    try {
+      const rows = await searchAnalysesFn({
+        data: { session_id: getSessionId(), query: q, limit: 10 },
+      });
+      setSearchResults(rows.map(storedToHistoryItem));
+    } catch (e) {
+      setSearchError(e instanceof Error ? e.message : String(e));
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const clearSearch = () => {
+    setQuery("");
+    setSearchResults(null);
+    setSearchError(null);
+  };
+
+  const visible = searchResults ?? items;
+  const isSearchMode = searchResults !== null;
+
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-6 flex items-center justify-between gap-3">
@@ -1509,6 +1544,64 @@ function HistoryView({ onOpen }: { onOpen: (r: AnalysisResult) => void }) {
           {source === "cloud" ? "Cloud 동기화" : "로컬 저장"}
         </span>
       </div>
+
+      {source === "cloud" && (
+        <div
+          className="mb-5 rounded-xl bg-white p-4 shadow-sm"
+          style={{ border: `1px solid ${BORDER}` }}
+        >
+          <div className="mb-2 flex items-center gap-2">
+            <Sparkles className="h-4 w-4" style={{ color: RED }} />
+            <p className="text-sm font-semibold" style={{ color: INK }}>
+              의미 검색
+            </p>
+            <span className="text-[11px]" style={{ color: MUTED }}>
+              Lovable AI Embeddings + pgvector
+            </span>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void runSearch();
+              }}
+              placeholder='예: "초보자를 위한 투자 영상", "감성적인 브이로그"...'
+              maxLength={500}
+              className="flex-1 rounded-lg bg-white px-3 py-2 text-sm outline-none focus:border-[#A70100]"
+              style={{ border: `1px solid ${BORDER}` }}
+            />
+            <button
+              onClick={() => void runSearch()}
+              disabled={searching || !query.trim()}
+              className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              style={{ backgroundColor: RED }}
+            >
+              {searching ? "검색 중..." : "검색"}
+            </button>
+            {isSearchMode && (
+              <button
+                onClick={clearSearch}
+                className="rounded-lg px-3 py-2 text-sm"
+                style={{ border: `1px solid ${BORDER}`, color: INK }}
+              >
+                전체 보기
+              </button>
+            )}
+          </div>
+          {searchError && (
+            <p className="mt-2 text-xs" style={{ color: RED }}>
+              {searchError}
+            </p>
+          )}
+          {isSearchMode && !searchError && (
+            <p className="mt-2 text-xs" style={{ color: MUTED }}>
+              "{query}" 와(과) 의미적으로 유사한 분석 {visible.length}건
+            </p>
+          )}
+        </div>
+      )}
+
       {loading ? (
         <div
           className="flex flex-col items-center gap-3 rounded-2xl bg-white p-12 shadow-sm"
@@ -1519,19 +1612,19 @@ function HistoryView({ onOpen }: { onOpen: (r: AnalysisResult) => void }) {
             히스토리를 불러오는 중...
           </p>
         </div>
-      ) : items.length === 0 ? (
+      ) : visible.length === 0 ? (
         <div
           className="flex flex-col items-center gap-3 rounded-2xl bg-white p-12 shadow-sm"
           style={{ border: `1px solid ${BORDER}` }}
         >
           <Inbox className="h-12 w-12" style={{ color: MUTED }} />
           <p className="text-sm" style={{ color: MUTED }}>
-            아직 분석한 영상이 없습니다
+            {isSearchMode ? "일치하는 분석이 없습니다" : "아직 분석한 영상이 없습니다"}
           </p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {items.map((it, i) => (
+          {visible.map((it, i) => (
             <div
               key={i}
               className="flex flex-col items-start gap-4 rounded-xl bg-white p-4 shadow-sm sm:flex-row sm:items-center"
@@ -1551,6 +1644,11 @@ function HistoryView({ onOpen }: { onOpen: (r: AnalysisResult) => void }) {
                 </p>
                 <p className="mt-0.5 text-xs" style={{ color: MUTED }}>
                   {it.category} · {it.date}
+                  {typeof it.similarity === "number" && (
+                    <span className="ml-2" style={{ color: RED }}>
+                      유사도 {Math.round(it.similarity * 100)}%
+                    </span>
+                  )}
                 </p>
               </div>
               <span
