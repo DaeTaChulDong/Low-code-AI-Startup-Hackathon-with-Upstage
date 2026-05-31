@@ -1449,6 +1449,138 @@ function ReportCard({ result }: { result: AnalysisResult }) {
   );
 }
 
+/* ---------------- Transcript Q&A (Grounded) ---------------- */
+
+type QAMsg = { role: "user" | "assistant"; content: string };
+
+function TranscriptQAPanel({ transcript, category }: { transcript: string; category: string }) {
+  const askFn = useServerFn(askAnalysis);
+  const [msgs, setMsgs] = useState<QAMsg[]>([]);
+  const [q, setQ] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const suggestions = [
+    "이 영상의 핵심 주장 3가지를 요약해줘",
+    "타겟 시청자에게 가장 강한 후킹 포인트는?",
+    "대본에서 가장 인용하기 좋은 한 문장은?",
+  ];
+
+  async function ask(question: string) {
+    const text = question.trim();
+    if (!text || loading) return;
+    setErr(null);
+    const next: QAMsg[] = [...msgs, { role: "user", content: text }];
+    setMsgs(next);
+    setQ("");
+    setLoading(true);
+    try {
+      const session_id = getSessionId();
+      const { answer } = await askFn({
+        data: {
+          session_id,
+          transcript,
+          question: text,
+          history: msgs.slice(-10),
+        },
+      });
+      setMsgs([...next, { role: "assistant", content: answer }]);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "질문 처리에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!transcript) return null;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-4 w-4" style={{ color: "#A70100" }} />
+        <h4 className="text-sm font-semibold" style={{ color: INK }}>
+          대본 기반 Q&A
+        </h4>
+        <span className="text-xs" style={{ color: MUTED }}>
+          (Upstage Solar · 대본 외 내용은 답하지 않음)
+        </span>
+      </div>
+
+      {msgs.length === 0 && (
+        <div className="flex flex-wrap gap-2">
+          {suggestions.map((s) => (
+            <button
+              key={s}
+              onClick={() => ask(s)}
+              disabled={loading}
+              className="rounded-full border px-3 py-1 text-xs transition-colors hover:bg-[#F5F5F5] disabled:opacity-50"
+              style={{ borderColor: BORDER, color: INK }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {msgs.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-lg p-3" style={{ backgroundColor: BG, border: `1px solid ${BORDER}` }}>
+          {msgs.map((m, i) => (
+            <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+              <div
+                className="max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-xs leading-relaxed"
+                style={
+                  m.role === "user"
+                    ? { backgroundColor: "#A70100", color: "white" }
+                    : { backgroundColor: "white", color: INK, border: `1px solid ${BORDER}` }
+                }
+              >
+                {m.content}
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div className="flex items-center gap-2 text-xs" style={{ color: MUTED }}>
+              <Loader2 className="h-3 w-3 animate-spin" /> 답변 생성 중…
+            </div>
+          )}
+        </div>
+      )}
+
+      {err && (
+        <p className="text-xs" style={{ color: "#A70100" }}>
+          {err}
+        </p>
+      )}
+
+      <div className="flex gap-2">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              ask(q);
+            }
+          }}
+          placeholder={`${category ? `[${category}] ` : ""}대본에 대해 질문해보세요…`}
+          className="flex-1 rounded-lg bg-white px-3 py-2 text-sm outline-none focus:border-[#A70100]"
+          style={{ border: `1px solid ${BORDER}` }}
+          disabled={loading}
+        />
+        <button
+          onClick={() => ask(q)}
+          disabled={loading || !q.trim()}
+          className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          style={{ backgroundColor: "#A70100" }}
+        >
+          {loading ? "…" : "질문"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 /* ---------------- View 5: History ---------------- */
 
 function HistoryView({ onOpen }: { onOpen: (r: AnalysisResult) => void }) {
