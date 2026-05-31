@@ -743,32 +743,46 @@ function LoadingView({
     if (startedRef.current) return;
     startedRef.current = true;
 
+    const isDoc = isDocumentFile(file);
+
     // 시각적 진행 (실제 API 응답 전까지 단계별 애니메이션)
     const t1 = setTimeout(() => setActive(1), 800);
     const t2 = setTimeout(() => setActive(2), 4000);
     const t3 = setTimeout(() => setActive(3), 12000);
 
-    extractAudioForWhisper(file)
-      .then(
-        (audioFile) => {
-          const fd = new FormData();
-          fd.append("audio", audioFile, "upload.wav");
-          fd.append("original_filename", file.name);
-          fd.append("category", category);
-          fd.append("custom_prompt", customPrompt);
-          return fetch("/api/analyze", { method: "POST", body: fd });
-        },
-        // Fallback: browser couldn't decode the video's audio track.
-        // Send the original file as `video` and let Whisper handle it server-side.
-        () => {
-          const fd = new FormData();
-          fd.append("video", file, file.name);
-          fd.append("original_filename", file.name);
-          fd.append("category", category);
-          fd.append("custom_prompt", customPrompt);
-          return fetch("/api/analyze", { method: "POST", body: fd });
-        },
-      )
+    const sendDocument = (): Promise<Response> => {
+      const fd = new FormData();
+      fd.append("document", file, file.name);
+      fd.append("original_filename", file.name);
+      fd.append("category", category);
+      fd.append("custom_prompt", customPrompt);
+      return fetch("/api/analyze", { method: "POST", body: fd });
+    };
+
+    const requestPromise: Promise<Response> = isDoc
+      ? sendDocument()
+      : extractAudioForWhisper(file).then(
+          (audioFile) => {
+            const fd = new FormData();
+            fd.append("audio", audioFile, "upload.wav");
+            fd.append("original_filename", file.name);
+            fd.append("category", category);
+            fd.append("custom_prompt", customPrompt);
+            return fetch("/api/analyze", { method: "POST", body: fd });
+          },
+          // Fallback: browser couldn't decode the video's audio track.
+          // Send the original file as `video` and let Whisper handle it server-side.
+          () => {
+            const fd = new FormData();
+            fd.append("video", file, file.name);
+            fd.append("original_filename", file.name);
+            fd.append("category", category);
+            fd.append("custom_prompt", customPrompt);
+            return fetch("/api/analyze", { method: "POST", body: fd });
+          },
+        );
+
+    requestPromise
       .then(async (res) => {
         const data = (await res.json()) as { result: AnalysisResult; status: string } | { error: string };
         if (!res.ok || "error" in data) {
