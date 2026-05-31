@@ -22,8 +22,28 @@ import {
 import {
   listAnalyses,
   saveAnalysis,
+  searchAnalyses,
   type StoredAnalysis,
 } from "@/lib/history.functions";
+
+function buildEmbedText(r: AnalysisResult): string {
+  const parts: string[] = [];
+  if (r.filename) parts.push(`파일: ${r.filename}`);
+  if (r.category) parts.push(`카테고리: ${r.category}`);
+  if (r.auto_category) {
+    parts.push(
+      `자동분류: ${r.auto_category.primary_category} / ${r.auto_category.sub_category} — ${r.auto_category.reasoning}`,
+    );
+  }
+  if (r.extracted) {
+    parts.push(`타겟: ${r.extracted.target_audience}`);
+    parts.push(`주제: ${(r.extracted.key_topics ?? []).join(", ")}`);
+    parts.push(`태그: ${(r.extracted.suggested_tags ?? []).join(", ")}`);
+  }
+  if (r.transcript_preview) parts.push(`대본: ${r.transcript_preview}`);
+  if (r.report) parts.push(`리포트: ${r.report.slice(0, 1500)}`);
+  return parts.filter(Boolean).join("\n").slice(0, 8000);
+}
 
 export const Route = createFileRoute("/")({
   head: () => ({
