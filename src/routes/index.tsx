@@ -118,6 +118,7 @@ type HistoryItem = {
   date: string;
   score: number;
   result: AnalysisResult;
+  similarity?: number;
 };
 
 const SESSION_KEY = "thinkit_session_id_v1";
@@ -151,6 +152,7 @@ function storedToHistoryItem(row: StoredAnalysis): HistoryItem {
     date: (row.created_at || result?.analyzed_at || "").slice(0, 10),
     score: row.score_total ?? result?.score?.total ?? 0,
     result: { ...result, extracted: (row.extracted as ExtractedInsights | null) ?? result?.extracted ?? null },
+    similarity: typeof row.similarity === "number" ? row.similarity : undefined,
   };
 }
 
