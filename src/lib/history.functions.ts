@@ -47,32 +47,37 @@ export type StoredAnalysis = {
   similarity?: number;
 };
 
-const EMBEDDING_MODEL = "google/gemini-embedding-001";
-const EMBEDDING_DIMS = 1536;
-const LOVABLE_GATEWAY = "https://ai.gateway.lovable.dev/v1/embeddings";
+// Upstage Solar Embedding — 4096 dims.
+// "passage" model for stored docs, "query" model for searches (asymmetric).
+const UPSTAGE_EMBEDDING_URL = "https://api.upstage.ai/v1/solar/embeddings";
+const UPSTAGE_PASSAGE_MODEL = "embedding-passage";
+const UPSTAGE_QUERY_MODEL = "embedding-query";
+const EMBEDDING_DIMS = 4096;
 
-async function embed(text: string): Promise<number[] | null> {
-  const key = process.env.LOVABLE_API_KEY;
+async function embed(
+  text: string,
+  kind: "passage" | "query",
+): Promise<number[] | null> {
+  const key = process.env.SOLAR_API_KEY;
   if (!key) {
-    console.error("LOVABLE_API_KEY missing — embedding skipped");
+    console.error("SOLAR_API_KEY missing — embedding skipped");
     return null;
   }
   try {
-    const res = await fetch(LOVABLE_GATEWAY, {
+    const res = await fetch(UPSTAGE_EMBEDDING_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: EMBEDDING_MODEL,
+        model: kind === "passage" ? UPSTAGE_PASSAGE_MODEL : UPSTAGE_QUERY_MODEL,
         input: text.slice(0, 8000),
-        dimensions: EMBEDDING_DIMS,
       }),
     });
     if (!res.ok) {
       const t = await res.text();
-      console.error(`Embedding error ${res.status}: ${t.slice(0, 300)}`);
+      console.error(`Upstage embedding error ${res.status}: ${t.slice(0, 300)}`);
       return null;
     }
     const data = (await res.json()) as {
@@ -81,7 +86,7 @@ async function embed(text: string): Promise<number[] | null> {
     const vec = data.data?.[0]?.embedding;
     return Array.isArray(vec) && vec.length === EMBEDDING_DIMS ? vec : null;
   } catch (e) {
-    console.error("Embedding fetch failed:", e);
+    console.error("Upstage embedding fetch failed:", e);
     return null;
   }
 }
