@@ -105,6 +105,7 @@ export type AnalysisResult = {
   extracted: ExtractedInsights | null;
   auto_category?: AutoCategory | null;
   transcript_preview: string;
+  transcript?: string;
   wpm: number;
   category: string;
   analyzed_at: string;
