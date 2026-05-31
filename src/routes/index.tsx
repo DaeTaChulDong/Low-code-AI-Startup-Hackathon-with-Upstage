@@ -1365,6 +1365,10 @@ function ReportCard({ result }: { result: AnalysisResult }) {
 
         <div className="my-8 h-px w-full" style={{ backgroundColor: BORDER }} />
 
+        <TranscriptQAPanel transcript={result.transcript ?? result.transcript_preview ?? ""} category={result.category} />
+
+        <div className="my-8 h-px w-full" style={{ backgroundColor: BORDER }} />
+
         <div className="flex flex-col gap-3">
           <label className="text-sm font-semibold" style={{ color: INK }}>
             분석 리포트를 이메일로 받아보세요
