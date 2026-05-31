@@ -61,11 +61,21 @@ type ApiScore = {
 };
 type ApiTitle = { style: string; title: string; why: string };
 type ApiThumb = { style: string; url: string | null; prompt: string; error?: string };
+export type ExtractedInsights = {
+  target_audience: string;
+  key_topics: string[];
+  emotional_hooks: string[];
+  visual_moments: string[];
+  call_to_actions: string[];
+  content_pillars: string[];
+  suggested_tags: string[];
+};
 export type AnalysisResult = {
   score: ApiScore;
   titles: ApiTitle[];
   thumbnails: ApiThumb[];
   report: string;
+  extracted: ExtractedInsights | null;
   transcript_preview: string;
   wpm: number;
   category: string;
@@ -74,6 +84,7 @@ export type AnalysisResult = {
 };
 
 type HistoryItem = {
+  id?: string;
   filename: string;
   category: string;
   date: string;
@@ -81,9 +92,39 @@ type HistoryItem = {
   result: AnalysisResult;
 };
 
+const SESSION_KEY = "thinkit_session_id_v1";
 const HISTORY_KEY = "thinkit_history_v1";
 const IDB_NAME = "thinkit";
 const IDB_STORE = "history";
+
+function getSessionId(): string {
+  if (typeof window === "undefined") return "ssr-placeholder";
+  try {
+    let id = window.localStorage.getItem(SESSION_KEY);
+    if (!id) {
+      id =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID().replace(/-/g, "")
+          : Math.random().toString(36).slice(2) + Date.now().toString(36);
+      window.localStorage.setItem(SESSION_KEY, id);
+    }
+    return id;
+  } catch {
+    return "fallback-" + Date.now().toString(36);
+  }
+}
+
+function storedToHistoryItem(row: StoredAnalysis): HistoryItem {
+  const result = row.result as AnalysisResult;
+  return {
+    id: row.id,
+    filename: row.filename ?? result?.filename ?? "Untitled",
+    category: row.category ?? result?.category ?? "",
+    date: (row.created_at || result?.analyzed_at || "").slice(0, 10),
+    score: row.score_total ?? result?.score?.total ?? 0,
+    result: { ...result, extracted: (row.extracted as ExtractedInsights | null) ?? result?.extracted ?? null },
+  };
+}
 
 function openHistoryDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -99,7 +140,7 @@ function openHistoryDB(): Promise<IDBDatabase> {
   });
 }
 
-async function loadHistory(): Promise<HistoryItem[]> {
+async function loadHistoryLocal(): Promise<HistoryItem[]> {
   if (typeof window === "undefined" || !("indexedDB" in window)) return [];
   try {
     const db = await openHistoryDB();
@@ -116,7 +157,6 @@ async function loadHistory(): Promise<HistoryItem[]> {
     db.close();
     return items;
   } catch {
-    // Fallback to legacy localStorage payload (won't contain base64 thumbnails).
     try {
       const raw = window.localStorage.getItem(HISTORY_KEY);
       return raw ? (JSON.parse(raw) as HistoryItem[]) : [];
@@ -126,7 +166,7 @@ async function loadHistory(): Promise<HistoryItem[]> {
   }
 }
 
-async function saveHistory(items: HistoryItem[]): Promise<void> {
+async function saveHistoryLocal(items: HistoryItem[]): Promise<void> {
   if (typeof window === "undefined" || !("indexedDB" in window)) return;
   const trimmed = items.slice(0, 20);
   try {
@@ -139,14 +179,13 @@ async function saveHistory(items: HistoryItem[]): Promise<void> {
       tx.onabort = () => reject(tx.error);
     });
     db.close();
-    // Clear legacy localStorage entry so we don't read stale data on fallback.
     try {
       window.localStorage.removeItem(HISTORY_KEY);
     } catch {
       /* ignore */
     }
   } catch {
-    // Last resort: ignore. IndexedDB usually has hundreds of MB available.
+    /* ignore */
   }
 }
 
