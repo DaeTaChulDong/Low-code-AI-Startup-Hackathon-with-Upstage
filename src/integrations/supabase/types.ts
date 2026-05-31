@@ -18,6 +18,8 @@ export type Database = {
         Row: {
           category: string | null
           created_at: string
+          embed_text: string | null
+          embedding: string | null
           extracted: Json | null
           filename: string | null
           id: string
@@ -28,6 +30,8 @@ export type Database = {
         Insert: {
           category?: string | null
           created_at?: string
+          embed_text?: string | null
+          embedding?: string | null
           extracted?: Json | null
           filename?: string | null
           id?: string
@@ -38,6 +42,8 @@ export type Database = {
         Update: {
           category?: string | null
           created_at?: string
+          embed_text?: string | null
+          embedding?: string | null
           extracted?: Json | null
           filename?: string | null
           id?: string
@@ -52,7 +58,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      match_analyses: {
+        Args: {
+          match_count?: number
+          match_session_id: string
+          min_similarity?: number
+          query_embedding: string
+        }
+        Returns: {
+          category: string
+          created_at: string
+          extracted: Json
+          filename: string
+          id: string
+          result: Json
+          score_total: number
+          similarity: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
