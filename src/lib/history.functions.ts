@@ -95,7 +95,7 @@ export const saveAnalysis = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => SaveSchema.parse(input))
   .handler(async ({ data }) => {
     // Embed in the background — failure should not block saving.
-    const vector = data.embed_text ? await embed(data.embed_text) : null;
+    const vector = data.embed_text ? await embed(data.embed_text, "passage") : null;
 
     const { data: row, error } = await supabaseAdmin
       .from("analyses")
