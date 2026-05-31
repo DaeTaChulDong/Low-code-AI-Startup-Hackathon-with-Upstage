@@ -849,10 +849,89 @@ function ResultsView({ result }: { result: AnalysisResult }) {
         분석 결과
       </h2>
       <TrendScoreCard score={result.score} />
+      {result.auto_category && (
+        <AutoCategoryCard auto={result.auto_category} userCategory={result.category} />
+      )}
       {result.extracted && <InsightsCard insights={result.extracted} />}
       <TitlesCard titles={result.titles} />
       <ThumbnailsCard thumbnails={result.thumbnails} />
       <ReportCard result={result} />
+    </div>
+  );
+}
+
+function AutoCategoryCard({
+  auto,
+  userCategory,
+}: {
+  auto: AutoCategory;
+  userCategory: string;
+}) {
+  const mismatch =
+    userCategory && auto.primary_category && !userCategory.includes(auto.primary_category);
+  return (
+    <div
+      className="rounded-2xl bg-white p-6 shadow-sm sm:p-8"
+      style={{ border: `1px solid ${BORDER}` }}
+    >
+      <div className="mb-3 flex items-center gap-2">
+        <Sparkles className="h-5 w-5" style={{ color: RED }} />
+        <h3 className="text-lg font-bold" style={{ color: INK }}>
+          자동 카테고리 분류
+        </h3>
+        <span className="text-[11px]" style={{ color: MUTED }}>
+          Powered by Upstage Document Classify
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className="rounded-full px-3 py-1 text-sm font-semibold"
+          style={{ backgroundColor: RED, color: "#fff" }}
+        >
+          {auto.primary_category}
+        </span>
+        {auto.sub_category && (
+          <span
+            className="rounded-full px-3 py-1 text-xs"
+            style={{ backgroundColor: BG, color: INK, border: `1px solid ${BORDER}` }}
+          >
+            {auto.sub_category}
+          </span>
+        )}
+        <span className="text-xs font-medium" style={{ color: MUTED }}>
+          신뢰도 {auto.confidence}%
+        </span>
+      </div>
+
+      {auto.reasoning && (
+        <p className="mt-3 text-sm leading-relaxed" style={{ color: INK }}>
+          {auto.reasoning}
+        </p>
+      )}
+
+      {auto.related_categories && auto.related_categories.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px]" style={{ color: MUTED }}>
+            관련:
+          </span>
+          {auto.related_categories.map((c, i) => (
+            <span
+              key={i}
+              className="rounded-md px-2 py-0.5 text-[11px]"
+              style={{ backgroundColor: BG, color: INK, border: `1px solid ${BORDER}` }}
+            >
+              {c}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {mismatch && (
+        <p className="mt-3 text-xs" style={{ color: RED }}>
+          ⚠ 사용자가 선택한 ‘{userCategory}’ 카테고리와 실제 콘텐츠가 다소 다릅니다. 위 자동 분류를 참고하세요.
+        </p>
+      )}
     </div>
   );
 }
