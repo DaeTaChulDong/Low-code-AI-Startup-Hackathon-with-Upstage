@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
 import {
   Target,
@@ -16,7 +17,13 @@ import {
   Inbox,
   Printer,
   AlertCircle,
+  Sparkles,
 } from "lucide-react";
+import {
+  listAnalyses,
+  saveAnalysis,
+  type StoredAnalysis,
+} from "@/lib/history.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -54,11 +61,21 @@ type ApiScore = {
 };
 type ApiTitle = { style: string; title: string; why: string };
 type ApiThumb = { style: string; url: string | null; prompt: string; error?: string };
+export type ExtractedInsights = {
+  target_audience: string;
+  key_topics: string[];
+  emotional_hooks: string[];
+  visual_moments: string[];
+  call_to_actions: string[];
+  content_pillars: string[];
+  suggested_tags: string[];
+};
 export type AnalysisResult = {
   score: ApiScore;
   titles: ApiTitle[];
   thumbnails: ApiThumb[];
   report: string;
+  extracted: ExtractedInsights | null;
   transcript_preview: string;
   wpm: number;
   category: string;
@@ -67,6 +84,7 @@ export type AnalysisResult = {
 };
 
 type HistoryItem = {
+  id?: string;
   filename: string;
   category: string;
   date: string;
@@ -74,9 +92,39 @@ type HistoryItem = {
   result: AnalysisResult;
 };
 
+const SESSION_KEY = "thinkit_session_id_v1";
 const HISTORY_KEY = "thinkit_history_v1";
 const IDB_NAME = "thinkit";
 const IDB_STORE = "history";
+
+function getSessionId(): string {
+  if (typeof window === "undefined") return "ssr-placeholder";
+  try {
+    let id = window.localStorage.getItem(SESSION_KEY);
+    if (!id) {
+      id =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID().replace(/-/g, "")
+          : Math.random().toString(36).slice(2) + Date.now().toString(36);
+      window.localStorage.setItem(SESSION_KEY, id);
+    }
+    return id;
+  } catch {
+    return "fallback-" + Date.now().toString(36);
+  }
+}
+
+function storedToHistoryItem(row: StoredAnalysis): HistoryItem {
+  const result = row.result as AnalysisResult;
+  return {
+    id: row.id,
+    filename: row.filename ?? result?.filename ?? "Untitled",
+    category: row.category ?? result?.category ?? "",
+    date: (row.created_at || result?.analyzed_at || "").slice(0, 10),
+    score: row.score_total ?? result?.score?.total ?? 0,
+    result: { ...result, extracted: (row.extracted as ExtractedInsights | null) ?? result?.extracted ?? null },
+  };
+}
 
 function openHistoryDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -92,7 +140,7 @@ function openHistoryDB(): Promise<IDBDatabase> {
   });
 }
 
-async function loadHistory(): Promise<HistoryItem[]> {
+async function loadHistoryLocal(): Promise<HistoryItem[]> {
   if (typeof window === "undefined" || !("indexedDB" in window)) return [];
   try {
     const db = await openHistoryDB();
@@ -109,7 +157,6 @@ async function loadHistory(): Promise<HistoryItem[]> {
     db.close();
     return items;
   } catch {
-    // Fallback to legacy localStorage payload (won't contain base64 thumbnails).
     try {
       const raw = window.localStorage.getItem(HISTORY_KEY);
       return raw ? (JSON.parse(raw) as HistoryItem[]) : [];
@@ -119,7 +166,7 @@ async function loadHistory(): Promise<HistoryItem[]> {
   }
 }
 
-async function saveHistory(items: HistoryItem[]): Promise<void> {
+async function saveHistoryLocal(items: HistoryItem[]): Promise<void> {
   if (typeof window === "undefined" || !("indexedDB" in window)) return;
   const trimmed = items.slice(0, 20);
   try {
@@ -132,14 +179,13 @@ async function saveHistory(items: HistoryItem[]): Promise<void> {
       tx.onabort = () => reject(tx.error);
     });
     db.close();
-    // Clear legacy localStorage entry so we don't read stale data on fallback.
     try {
       window.localStorage.removeItem(HISTORY_KEY);
     } catch {
       /* ignore */
     }
   } catch {
-    // Last resort: ignore. IndexedDB usually has hundreds of MB available.
+    /* ignore */
   }
 }
 
@@ -150,6 +196,7 @@ function Index() {
   const [customPrompt, setCustomPrompt] = useState("");
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const saveAnalysisFn = useServerFn(saveAnalysis);
 
   const startAnalysis = () => {
     if (!file) return;
@@ -183,14 +230,29 @@ function Index() {
             onDone={(r) => {
               const enriched: AnalysisResult = { ...r, filename: file.name };
               setResult(enriched);
-              const item: HistoryItem = {
-                filename: file.name,
-                category: r.category,
-                date: r.analyzed_at.slice(0, 10),
-                score: r.score.total,
-                result: enriched,
-              };
-              void loadHistory().then((prev) => saveHistory([item, ...prev]));
+              // Cloud에 저장 (실패해도 사용자 흐름은 방해하지 않음)
+              void saveAnalysisFn({
+                data: {
+                  session_id: getSessionId(),
+                  filename: file.name,
+                  category: r.category,
+                  score_total: r.score.total,
+                  result: enriched,
+                  extracted: r.extracted ?? null,
+                },
+              }).catch((e) => {
+                console.error("Cloud save failed; falling back to local:", e);
+                const item: HistoryItem = {
+                  filename: file.name,
+                  category: r.category,
+                  date: r.analyzed_at.slice(0, 10),
+                  score: r.score.total,
+                  result: enriched,
+                };
+                void loadHistoryLocal().then((prev) =>
+                  saveHistoryLocal([item, ...prev]),
+                );
+              });
               setView("results");
             }}
             onError={(msg) => {
@@ -779,9 +841,87 @@ function ResultsView({ result }: { result: AnalysisResult }) {
         분석 결과
       </h2>
       <TrendScoreCard score={result.score} />
+      {result.extracted && <InsightsCard insights={result.extracted} />}
       <TitlesCard titles={result.titles} />
       <ThumbnailsCard thumbnails={result.thumbnails} />
       <ReportCard result={result} />
+    </div>
+  );
+}
+
+function InsightsCard({ insights }: { insights: ExtractedInsights }) {
+  const sections: Array<{ label: string; items: string[] }> = [
+    { label: "핵심 주제", items: insights.key_topics ?? [] },
+    { label: "감정 후킹 포인트", items: insights.emotional_hooks ?? [] },
+    { label: "썸네일 후보 장면", items: insights.visual_moments ?? [] },
+    { label: "행동 유도 (CTA)", items: insights.call_to_actions ?? [] },
+    { label: "콘텐츠 기둥", items: insights.content_pillars ?? [] },
+  ];
+  return (
+    <div
+      className="rounded-2xl bg-white p-6 shadow-sm sm:p-8"
+      style={{ border: `1px solid ${BORDER}` }}
+    >
+      <div className="mb-4 flex items-center gap-2">
+        <Sparkles className="h-5 w-5" style={{ color: RED }} />
+        <h3 className="text-lg font-bold" style={{ color: INK }}>
+          AI 추출 인사이트
+        </h3>
+        <span className="text-[11px]" style={{ color: MUTED }}>
+          Powered by Upstage Information Extract
+        </span>
+      </div>
+
+      {insights.target_audience && (
+        <div className="mb-4 rounded-lg p-3 text-sm" style={{ backgroundColor: BG, color: INK }}>
+          <span className="mr-2 font-semibold" style={{ color: RED }}>
+            타겟 시청자
+          </span>
+          {insights.target_audience}
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {sections.map((s) =>
+          s.items.length === 0 ? null : (
+            <div key={s.label}>
+              <p className="mb-2 text-xs font-semibold" style={{ color: MUTED }}>
+                {s.label}
+              </p>
+              <ul className="flex flex-col gap-1.5">
+                {s.items.map((it, i) => (
+                  <li
+                    key={i}
+                    className="rounded-md px-2.5 py-1.5 text-xs leading-relaxed"
+                    style={{ backgroundColor: BG, color: INK }}
+                  >
+                    {it}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ),
+        )}
+      </div>
+
+      {insights.suggested_tags && insights.suggested_tags.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-semibold" style={{ color: MUTED }}>
+            추천 태그
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {insights.suggested_tags.map((tag, i) => (
+              <span
+                key={i}
+                className="rounded-full px-2.5 py-1 text-[11px] font-medium"
+                style={{ backgroundColor: BG, color: INK, border: `1px solid ${BORDER}` }}
+              >
+                #{tag.replace(/^#/, "")}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1163,31 +1303,81 @@ function ReportCard({ result }: { result: AnalysisResult }) {
 
 function HistoryView({ onOpen }: { onOpen: (r: AnalysisResult) => void }) {
   const [items, setItems] = useState<HistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [source, setSource] = useState<"cloud" | "local">("cloud");
+  const listAnalysesFn = useServerFn(listAnalyses);
+
   useEffect(() => {
     let cancelled = false;
-    void loadHistory().then((data) => {
-      if (!cancelled) setItems(data);
-    });
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === HISTORY_KEY) {
-        void loadHistory().then((data) => {
-          if (!cancelled) setItems(data);
+    setLoading(true);
+
+    const load = async () => {
+      try {
+        const rows = await listAnalysesFn({
+          data: { session_id: getSessionId() },
         });
+        if (cancelled) return;
+        const cloud = rows.map(storedToHistoryItem);
+        // Cloud가 비어 있다면 로컬 폴백도 시도 (마이그레이션 편의)
+        if (cloud.length === 0) {
+          const local = await loadHistoryLocal();
+          if (cancelled) return;
+          if (local.length > 0) {
+            setSource("local");
+            setItems(local);
+          } else {
+            setItems([]);
+          }
+        } else {
+          setSource("cloud");
+          setItems(cloud);
+        }
+      } catch (e) {
+        console.error("Cloud history load failed, using local:", e);
+        if (cancelled) return;
+        const local = await loadHistoryLocal();
+        if (!cancelled) {
+          setSource("local");
+          setItems(local);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     };
-    window.addEventListener("storage", onStorage);
+
+    void load();
     return () => {
       cancelled = true;
-      window.removeEventListener("storage", onStorage);
     };
-  }, []);
+  }, [listAnalysesFn]);
 
   return (
     <div className="mx-auto max-w-4xl">
-      <h2 className="mb-6 text-2xl font-bold" style={{ color: INK }}>
-        분석 히스토리
-      </h2>
-      {items.length === 0 ? (
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <h2 className="text-2xl font-bold" style={{ color: INK }}>
+          분석 히스토리
+        </h2>
+        <span
+          className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+          style={{
+            backgroundColor: source === "cloud" ? RED : BG,
+            color: source === "cloud" ? "white" : MUTED,
+          }}
+        >
+          {source === "cloud" ? "Cloud 동기화" : "로컬 저장"}
+        </span>
+      </div>
+      {loading ? (
+        <div
+          className="flex flex-col items-center gap-3 rounded-2xl bg-white p-12 shadow-sm"
+          style={{ border: `1px solid ${BORDER}` }}
+        >
+          <Loader2 className="h-8 w-8 animate-spin" style={{ color: RED }} />
+          <p className="text-sm" style={{ color: MUTED }}>
+            히스토리를 불러오는 중...
+          </p>
+        </div>
+      ) : items.length === 0 ? (
         <div
           className="flex flex-col items-center gap-3 rounded-2xl bg-white p-12 shadow-sm"
           style={{ border: `1px solid ${BORDER}` }}
