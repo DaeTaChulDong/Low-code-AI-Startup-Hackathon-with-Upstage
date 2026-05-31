@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState } from "react";
 import {
   Target,
@@ -16,7 +17,13 @@ import {
   Inbox,
   Printer,
   AlertCircle,
+  Sparkles,
 } from "lucide-react";
+import {
+  listAnalyses,
+  saveAnalysis,
+  type StoredAnalysis,
+} from "@/lib/history.functions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
