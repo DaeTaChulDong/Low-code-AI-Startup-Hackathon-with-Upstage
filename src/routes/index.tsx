@@ -1225,24 +1225,53 @@ function ReportCard({ result }: { result: AnalysisResult }) {
 
 function HistoryView({ onOpen }: { onOpen: (r: AnalysisResult) => void }) {
   const [items, setItems] = useState<HistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [source, setSource] = useState<"cloud" | "local">("cloud");
+  const listAnalysesFn = useServerFn(listAnalyses);
+
   useEffect(() => {
     let cancelled = false;
-    void loadHistory().then((data) => {
-      if (!cancelled) setItems(data);
-    });
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === HISTORY_KEY) {
-        void loadHistory().then((data) => {
-          if (!cancelled) setItems(data);
+    setLoading(true);
+
+    const load = async () => {
+      try {
+        const rows = await listAnalysesFn({
+          data: { session_id: getSessionId() },
         });
+        if (cancelled) return;
+        const cloud = rows.map(storedToHistoryItem);
+        // Cloud가 비어 있다면 로컬 폴백도 시도 (마이그레이션 편의)
+        if (cloud.length === 0) {
+          const local = await loadHistoryLocal();
+          if (cancelled) return;
+          if (local.length > 0) {
+            setSource("local");
+            setItems(local);
+          } else {
+            setItems([]);
+          }
+        } else {
+          setSource("cloud");
+          setItems(cloud);
+        }
+      } catch (e) {
+        console.error("Cloud history load failed, using local:", e);
+        if (cancelled) return;
+        const local = await loadHistoryLocal();
+        if (!cancelled) {
+          setSource("local");
+          setItems(local);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     };
-    window.addEventListener("storage", onStorage);
+
+    void load();
     return () => {
       cancelled = true;
-      window.removeEventListener("storage", onStorage);
     };
-  }, []);
+  }, [listAnalysesFn]);
 
   return (
     <div className="mx-auto max-w-4xl">
