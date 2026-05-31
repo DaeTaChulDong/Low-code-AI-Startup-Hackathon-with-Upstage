@@ -13,8 +13,48 @@ const SOLAR_URL = "https://api.upstage.ai/v1/solar/chat/completions";
 const SOLAR_MODEL = "solar-pro2";
 const UPSTAGE_IE_URL = "https://api.upstage.ai/v1/information-extraction";
 const UPSTAGE_IE_MODEL = "information-extract";
+const UPSTAGE_PARSE_URL = "https://api.upstage.ai/v1/document-digitization";
+const UPSTAGE_PARSE_MODEL = "document-parse";
 
 const OPENAI_BASE = "https://api.openai.com/v1";
+
+async function parseDocument(
+  upstageKey: string,
+  doc: File,
+): Promise<{ text: string; pages: number }> {
+  const buf = await doc.arrayBuffer();
+  const blob = new Blob([buf], { type: doc.type || "application/pdf" });
+  const fd = new FormData();
+  fd.append("document", blob, doc.name || "upload.pdf");
+  fd.append("model", UPSTAGE_PARSE_MODEL);
+  fd.append("ocr", "auto");
+  fd.append("output_formats", '["markdown"]');
+  fd.append("coordinates", "false");
+  fd.append("base64_encoding", "[]");
+
+  const res = await fetch(UPSTAGE_PARSE_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${upstageKey}` },
+    body: fd,
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Upstage Document Parse error ${res.status}: ${t.slice(0, 300)}`);
+  }
+  const data = (await res.json()) as {
+    content?: { markdown?: string; text?: string; html?: string };
+    elements?: Array<{ content?: { markdown?: string; text?: string } }>;
+    usage?: { pages?: number };
+  };
+  let text = data.content?.markdown ?? data.content?.text ?? "";
+  if (!text && Array.isArray(data.elements)) {
+    text = data.elements
+      .map((el) => el.content?.markdown ?? el.content?.text ?? "")
+      .filter(Boolean)
+      .join("\n\n");
+  }
+  return { text: text.trim(), pages: data.usage?.pages ?? 0 };
+}
 
 export type ExtractedInsights = {
   target_audience: string;
