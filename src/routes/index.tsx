@@ -196,6 +196,7 @@ function Index() {
   const [customPrompt, setCustomPrompt] = useState("");
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const saveAnalysisFn = useServerFn(saveAnalysis);
 
   const startAnalysis = () => {
     if (!file) return;
