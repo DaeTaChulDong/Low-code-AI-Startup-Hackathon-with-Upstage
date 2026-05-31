@@ -11,8 +11,125 @@ import { createFileRoute } from "@tanstack/react-router";
 
 const SOLAR_URL = "https://api.upstage.ai/v1/solar/chat/completions";
 const SOLAR_MODEL = "solar-pro2";
+const UPSTAGE_IE_URL = "https://api.upstage.ai/v1/information-extraction";
+const UPSTAGE_IE_MODEL = "information-extract";
 
 const OPENAI_BASE = "https://api.openai.com/v1";
+
+export type ExtractedInsights = {
+  target_audience: string;
+  key_topics: string[];
+  emotional_hooks: string[];
+  visual_moments: string[];
+  call_to_actions: string[];
+  content_pillars: string[];
+  suggested_tags: string[];
+};
+
+async function extractInsights(
+  upstageKey: string,
+  script: string,
+  category: string,
+): Promise<ExtractedInsights | null> {
+  // Upstage Information Extract: structured JSON via json_schema.
+  // Pass the transcript as a user message text part (no document upload needed).
+  const schema = {
+    type: "object",
+    properties: {
+      target_audience: {
+        type: "string",
+        description: "이 영상의 핵심 타겟 시청자층을 1~2문장으로 한국어로 서술",
+      },
+      key_topics: {
+        type: "array",
+        items: { type: "string" },
+        description: "영상에서 다루는 핵심 주제 3~6개 (한국어, 짧은 명사구)",
+      },
+      emotional_hooks: {
+        type: "array",
+        items: { type: "string" },
+        description: "시청자의 감정을 자극할 수 있는 순간/포인트 2~5개 (한국어)",
+      },
+      visual_moments: {
+        type: "array",
+        items: { type: "string" },
+        description: "썸네일 후보가 될 만한 시각적 장면/이미지 묘사 2~5개 (한국어)",
+      },
+      call_to_actions: {
+        type: "array",
+        items: { type: "string" },
+        description: "영상에 포함하면 좋을 행동 유도 문구 2~4개 (한국어)",
+      },
+      content_pillars: {
+        type: "array",
+        items: { type: "string" },
+        description: `${category} 카테고리에서 이 영상이 속하는 콘텐츠 기둥/시리즈 컨셉 2~4개 (한국어)`,
+      },
+      suggested_tags: {
+        type: "array",
+        items: { type: "string" },
+        description: "추천 유튜브 태그/해시태그 5~10개 (한국어 또는 영어, # 없이 단어만)",
+      },
+    },
+    required: [
+      "target_audience",
+      "key_topics",
+      "emotional_hooks",
+      "visual_moments",
+      "call_to_actions",
+      "content_pillars",
+      "suggested_tags",
+    ],
+    additionalProperties: false,
+  };
+
+  const res = await fetch(UPSTAGE_IE_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${upstageKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: UPSTAGE_IE_MODEL,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `다음은 유튜브 '${category}' 카테고리 영상의 한국어 대본입니다.\n\n${script.slice(0, 6000)}`,
+            },
+          ],
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "youtube_insights",
+          strict: true,
+          schema,
+        },
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    console.error(`Upstage IE error ${res.status}: ${text.slice(0, 300)}`);
+    return null;
+  }
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const content = data.choices?.[0]?.message?.content ?? "";
+  try {
+    const parsed = JSON.parse(content) as ExtractedInsights;
+    return parsed;
+  } catch (e) {
+    console.error("Upstage IE JSON parse failed:", e, content.slice(0, 200));
+    return null;
+  }
+}
 
 type TrendScore = {
   keyword_score: number;
