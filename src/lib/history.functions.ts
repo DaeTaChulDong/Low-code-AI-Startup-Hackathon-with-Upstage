@@ -26,13 +26,18 @@ const DeleteSchema = z.object({
   id: z.string().uuid(),
 });
 
+// Use `any` for jsonb columns — TanStack's serializable-return check rejects `unknown`.
+// Runtime shape is whatever the analyze endpoint stored.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type StoredAnalysis = {
   id: string;
   filename: string | null;
   category: string | null;
   score_total: number | null;
-  result: unknown;
-  extracted: unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  result: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  extracted: any;
   created_at: string;
 };
 
