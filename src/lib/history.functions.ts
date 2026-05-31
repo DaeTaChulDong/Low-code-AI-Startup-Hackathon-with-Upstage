@@ -188,3 +188,86 @@ export const searchAnalyses = createServerFn({ method: "POST" })
     }
     return (rows ?? []) as StoredAnalysis[];
   });
+
+// ───────────────────────────────────────────────────────────────────────
+// Grounded Q&A — answers based ONLY on a stored analysis transcript.
+// Uses Upstage Solar Chat with a strict grounding system prompt.
+// ───────────────────────────────────────────────────────────────────────
+const SOLAR_CHAT_URL = "https://api.upstage.ai/v1/solar/chat/completions";
+const SOLAR_CHAT_MODEL = "solar-pro2";
+
+type AnalysisResultLike = {
+  transcript?: string;
+  transcript_preview?: string;
+  report?: string;
+  category?: string;
+  auto_category?: { primary_category?: string; sub_category?: string };
+} | null;
+
+export const askAnalysis = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => AskSchema.parse(input))
+  .handler(async ({ data }): Promise<{ answer: string }> => {
+    const key = process.env.SOLAR_API_KEY;
+    if (!key) throw new Error("SOLAR_API_KEY가 설정되어 있지 않습니다.");
+
+    // Prefer client-passed transcript; fall back to loading from DB by id.
+    let transcript = (data.transcript ?? "").trim();
+    let category: string | undefined;
+    if (!transcript && data.id) {
+      const { data: row, error } = await supabaseAdmin
+        .from("analyses")
+        .select("result, category")
+        .eq("session_id", data.session_id)
+        .eq("id", data.id)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      const r = (row?.result ?? null) as AnalysisResultLike;
+      transcript = (r?.transcript ?? r?.transcript_preview ?? "").trim();
+      category = row?.category ?? r?.category ?? undefined;
+    }
+    if (!transcript) {
+      throw new Error("대본을 찾을 수 없습니다. 분석 결과에 대본이 저장되지 않았어요.");
+    }
+
+    const truncated = transcript.slice(0, 12000);
+    const system = `당신은 유튜브 콘텐츠 컨설턴트입니다. 사용자의 질문에 대해 아래 [영상 대본] 내용만 근거로 한국어로 답하세요.
+
+규칙:
+1. 대본에 직접 나오지 않은 사실은 절대 추측하거나 지어내지 마세요.
+2. 대본에 없는 정보를 물어보면 "대본에 해당 내용이 없습니다."라고 명확히 답하세요.
+3. 답변 마지막에는 (필요시) 대본의 짧은 인용구를 1~2개 따옴표로 제시하세요.
+4. 답변은 간결하고 구체적으로, 불필요한 서론 없이 바로 답하세요.
+
+[영상 대본${category ? ` · 카테고리: ${category}` : ""}]
+${truncated}`;
+
+    const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+      { role: "system", content: system },
+      ...(data.history ?? []).map((m) => ({ role: m.role, content: m.content })),
+      { role: "user", content: data.question },
+    ];
+
+    const res = await fetch(SOLAR_CHAT_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: SOLAR_CHAT_MODEL,
+        messages,
+        temperature: 0.2,
+        max_tokens: 800,
+      }),
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(`Solar 응답 오류 ${res.status}: ${t.slice(0, 200)}`);
+    }
+    const json = (await res.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const answer = (json.choices?.[0]?.message?.content ?? "").trim();
+    if (!answer) throw new Error("빈 응답을 받았습니다.");
+    return { answer };
+  });
