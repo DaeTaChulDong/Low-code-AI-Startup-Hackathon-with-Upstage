@@ -247,6 +247,7 @@ function Index() {
                   score_total: r.score.total,
                   result: enriched,
                   extracted: r.extracted ?? null,
+                  embed_text: buildEmbedText(enriched),
                 },
               }).catch((e) => {
                 console.error("Cloud save failed; falling back to local:", e);
