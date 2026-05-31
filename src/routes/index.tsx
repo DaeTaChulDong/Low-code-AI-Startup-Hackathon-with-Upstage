@@ -70,12 +70,20 @@ export type ExtractedInsights = {
   content_pillars: string[];
   suggested_tags: string[];
 };
+export type AutoCategory = {
+  primary_category: string;
+  sub_category: string;
+  confidence: number;
+  reasoning: string;
+  related_categories: string[];
+};
 export type AnalysisResult = {
   score: ApiScore;
   titles: ApiTitle[];
   thumbnails: ApiThumb[];
   report: string;
   extracted: ExtractedInsights | null;
+  auto_category?: AutoCategory | null;
   transcript_preview: string;
   wpm: number;
   category: string;
