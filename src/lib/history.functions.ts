@@ -15,6 +15,7 @@ const SaveSchema = z.object({
   score_total: z.number().int().min(0).max(100).nullable().optional(),
   result: z.unknown(),
   extracted: z.unknown().nullable().optional(),
+  embed_text: z.string().max(20000).nullable().optional(),
 });
 
 const ListSchema = z.object({
@@ -26,8 +27,12 @@ const DeleteSchema = z.object({
   id: z.string().uuid(),
 });
 
-// Use `any` for jsonb columns — TanStack's serializable-return check rejects `unknown`.
-// Runtime shape is whatever the analyze endpoint stored.
+const SearchSchema = z.object({
+  session_id: SessionIdSchema,
+  query: z.string().min(1).max(500),
+  limit: z.number().int().min(1).max(20).optional(),
+});
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type StoredAnalysis = {
   id: string;
@@ -39,13 +44,57 @@ export type StoredAnalysis = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   extracted: any;
   created_at: string;
+  similarity?: number;
 };
+
+const EMBEDDING_MODEL = "google/gemini-embedding-001";
+const EMBEDDING_DIMS = 1536;
+const LOVABLE_GATEWAY = "https://ai.gateway.lovable.dev/v1/embeddings";
+
+async function embed(text: string): Promise<number[] | null> {
+  const key = process.env.LOVABLE_API_KEY;
+  if (!key) {
+    console.error("LOVABLE_API_KEY missing — embedding skipped");
+    return null;
+  }
+  try {
+    const res = await fetch(LOVABLE_GATEWAY, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: EMBEDDING_MODEL,
+        input: text.slice(0, 8000),
+        dimensions: EMBEDDING_DIMS,
+      }),
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      console.error(`Embedding error ${res.status}: ${t.slice(0, 300)}`);
+      return null;
+    }
+    const data = (await res.json()) as {
+      data?: Array<{ embedding?: number[] }>;
+    };
+    const vec = data.data?.[0]?.embedding;
+    return Array.isArray(vec) && vec.length === EMBEDDING_DIMS ? vec : null;
+  } catch (e) {
+    console.error("Embedding fetch failed:", e);
+    return null;
+  }
+}
 
 export const saveAnalysis = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => SaveSchema.parse(input))
   .handler(async ({ data }) => {
+    // Embed in the background — failure should not block saving.
+    const vector = data.embed_text ? await embed(data.embed_text) : null;
+
     const { data: row, error } = await supabaseAdmin
       .from("analyses")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .insert({
         session_id: data.session_id,
         filename: data.filename ?? null,
@@ -53,7 +102,11 @@ export const saveAnalysis = createServerFn({ method: "POST" })
         score_total: data.score_total ?? null,
         result: data.result as never,
         extracted: (data.extracted ?? null) as never,
-      })
+        embed_text: data.embed_text ?? null,
+        // pgvector accepts the JS array directly via the JS client
+        embedding: vector as never,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
       .select("id, created_at")
       .single();
 
@@ -61,7 +114,7 @@ export const saveAnalysis = createServerFn({ method: "POST" })
       console.error("saveAnalysis failed:", error);
       throw new Error(error.message);
     }
-    return { id: row.id, created_at: row.created_at };
+    return { id: row.id, created_at: row.created_at, embedded: vector !== null };
   });
 
 export const listAnalyses = createServerFn({ method: "POST" })
@@ -94,4 +147,24 @@ export const deleteAnalysis = createServerFn({ method: "POST" })
       throw new Error(error.message);
     }
     return { ok: true };
+  });
+
+export const searchAnalyses = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => SearchSchema.parse(input))
+  .handler(async ({ data }): Promise<StoredAnalysis[]> => {
+    const vector = await embed(data.query);
+    if (!vector) {
+      throw new Error("검색 쿼리 임베딩 생성에 실패했습니다.");
+    }
+    const { data: rows, error } = await supabaseAdmin.rpc("match_analyses", {
+      query_embedding: vector as unknown as string,
+      match_session_id: data.session_id,
+      match_count: data.limit ?? 10,
+      min_similarity: 0.2,
+    });
+    if (error) {
+      console.error("searchAnalyses failed:", error);
+      throw new Error(error.message);
+    }
+    return (rows ?? []) as StoredAnalysis[];
   });
